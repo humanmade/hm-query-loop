@@ -3,7 +3,7 @@
  * Plugin Name: HM Query Loop
  * Plugin URI: https://humanmade.com
  * Description: Extends the Query Loop block with advanced controls for multiple query loops on a single page
- * Version: __VERSION__
+ * Version: 0.1.1
  * Author: Human Made
  * Author URI: https://humanmade.com
  * License: GPL-2.0+
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'HM_QUERY_LOOP_VERSION', '__VERSION__' );
+define( 'HM_QUERY_LOOP_VERSION', '0.1.1' );
 define( 'HM_QUERY_LOOP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 
