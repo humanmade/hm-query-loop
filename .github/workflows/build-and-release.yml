@@ -1,4 +1,4 @@
-name: Production Release
+name: Production Build & Release
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out project
-        uses: actions/checkout@v5 # See note below on pinning SHAs.
+        uses: actions/checkout@v5
 
       - name: Set up Node
         uses: actions/setup-node@v4
