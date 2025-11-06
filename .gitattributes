@@ -1,0 +1,11 @@
+# Git attributes for release automation
+
+# Exclude development files from release archives
+/.github export-ignore
+/src export-ignore
+/node_modules export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/package.json export-ignore
+/package-lock.json export-ignore
+/README.md export-ignore
