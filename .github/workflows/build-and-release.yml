@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out project
-        uses: actions/checkout # See note below on pinning SHAs.
+        uses: actions/checkout@v5 # See note below on pinning SHAs.
 
       - name: Set up Node
-        uses: actions/setup-node
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'npm'
