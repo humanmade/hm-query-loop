@@ -12,11 +12,13 @@ export const test = base.extend({
 
 		// Check if we need to log in
 		const loginForm = page.locator('#loginform');
-		if (await loginForm.isVisible()) {
+		const isLoginPage = await loginForm.isVisible({ timeout: 5000 }).catch(() => false);
+
+		if (isLoginPage) {
 			await page.fill('#user_login', 'admin');
 			await page.fill('#user_pass', 'password');
 			await page.click('#wp-submit');
-			await page.waitForURL('**/wp-admin/**');
+			await page.waitForURL('**/wp-admin/**', { timeout: 10000 });
 		}
 
 		await use(page);
@@ -32,13 +34,19 @@ export const test = base.extend({
 			 */
 			async createNewPost(postType = 'page') {
 				await admin.goto(`/wp-admin/post-new.php?post_type=${postType}`);
-				await page.waitForSelector('.edit-post-layout, .edit-site-layout');
+				await page.waitForSelector('.edit-post-layout, .edit-site-layout', { timeout: 15000 });
 
-				// Close welcome guide if it appears
-				const welcomeGuide = page.locator('.edit-post-welcome-guide');
-				if (await welcomeGuide.isVisible()) {
+				// Close welcome guide if it appears (with timeout)
+				const welcomeGuideVisible = await page.locator('.edit-post-welcome-guide')
+					.isVisible({ timeout: 2000 })
+					.catch(() => false);
+
+				if (welcomeGuideVisible) {
 					await page.click('button[aria-label="Close"]');
 				}
+
+				// Wait for editor to be ready
+				await page.waitForSelector('.block-editor-writing-flow', { timeout: 10000 });
 			},
 
 			/**
@@ -61,8 +69,11 @@ export const test = base.extend({
 			 */
 			async openBlockSettings() {
 				const settingsButton = page.locator('button[aria-label="Settings"]');
-				if (!(await settingsButton.getAttribute('aria-expanded')) === 'true') {
+				const isExpanded = await settingsButton.getAttribute('aria-expanded');
+
+				if (isExpanded !== 'true') {
 					await settingsButton.click();
+					await page.waitForTimeout(300);
 				}
 			},
 
@@ -72,16 +83,18 @@ export const test = base.extend({
 			async publish() {
 				// Click publish button
 				const publishButton = page.locator('button.editor-post-publish-button__button, button.editor-post-publish-panel__toggle');
-				await publishButton.click();
+				await publishButton.first().click();
 
 				// If there's a pre-publish panel, click publish again
 				const prePublishButton = page.locator('.editor-post-publish-panel__header-publish-button button');
-				if (await prePublishButton.isVisible()) {
+				const hasPrePublish = await prePublishButton.isVisible({ timeout: 2000 }).catch(() => false);
+
+				if (hasPrePublish) {
 					await prePublishButton.click();
 				}
 
 				// Wait for success notice
-				await page.waitForSelector('.components-snackbar');
+				await page.waitForSelector('.components-snackbar', { timeout: 10000 });
 			},
 
 			/**
@@ -90,7 +103,9 @@ export const test = base.extend({
 			async getPermalink() {
 				// Open post publish panel if not already open
 				const panel = page.locator('.editor-post-publish-panel');
-				if (!(await panel.isVisible())) {
+				const isPanelVisible = await panel.isVisible({ timeout: 2000 }).catch(() => false);
+
+				if (!isPanelVisible) {
 					await this.publish();
 				}
 

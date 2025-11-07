@@ -38,8 +38,15 @@ jobs:
           timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
           sleep 5
 
+      - name: Debug - Check WordPress status
+        run: |
+          curl -I http://localhost:8889 || echo "WordPress not responding"
+          docker ps
+
       - name: Run Playwright tests
         run: npm run test:e2e
+        env:
+          CI: true
 
       - name: Stop WordPress environment
         if: always()
