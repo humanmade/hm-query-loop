@@ -31,9 +31,12 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Start WordPress environment
+        run: npm run wp-env start
+
+      - name: Wait for WordPress to be ready
         run: |
-          npm run wp-env start
-          npm run wp-env run tests-cli "wp core version"
+          timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
+          sleep 5
 
       - name: Run Playwright tests
         run: npm run test:e2e
