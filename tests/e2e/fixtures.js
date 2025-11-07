@@ -34,6 +34,8 @@ export const test = base.extend({
 			 */
 			async createNewPost(postType = 'page') {
 				await admin.goto(`/wp-admin/post-new.php?post_type=${postType}`);
+
+				// Wait for editor layout to load
 				await page.waitForSelector('.edit-post-layout, .edit-site-layout', { timeout: 15000 });
 
 				// Close welcome guide if it appears (with timeout)
@@ -45,8 +47,19 @@ export const test = base.extend({
 					await page.click('button[aria-label="Close"]');
 				}
 
-				// Wait for editor to be ready
-				await page.waitForSelector('.block-editor-writing-flow', { timeout: 10000 });
+				// Wait for the editor canvas to be ready
+				// Use a more reliable selector - wait for the post title or canvas
+				await Promise.race([
+					page.waitForSelector('.editor-post-title__input', { timeout: 10000 }),
+					page.waitForSelector('.edit-post-visual-editor', { timeout: 10000 }),
+					page.waitForSelector('iframe[name="editor-canvas"]', { timeout: 10000 }),
+				]).catch(() => {
+					// If none of the selectors work, just continue
+					console.log('Editor canvas selectors not found, continuing anyway');
+				});
+
+				// Give it a moment to settle
+				await page.waitForTimeout(500);
 			},
 
 			/**

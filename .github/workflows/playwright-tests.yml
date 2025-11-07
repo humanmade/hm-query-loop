@@ -10,6 +10,9 @@ jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -44,6 +47,8 @@ jobs:
           docker ps
 
       - name: Run Playwright tests
+        id: tests
+        continue-on-error: true
         run: npm run test:e2e
         env:
           CI: true
@@ -69,3 +74,14 @@ jobs:
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Comment PR with test results
+        uses: daun/playwright-report-comment@v3
+        if: always() && github.event_name == 'pull_request'
+        with:
+          report-path: playwright-report/
+          report-url: ${{ steps.upload-artifact.outputs.artifact-url }}
+
+      - name: Fail if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
