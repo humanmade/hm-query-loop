@@ -32,11 +32,4 @@ module.exports = defineConfig({
 			use: { ...devices['Desktop Chrome'] },
 		},
 	],
-
-	webServer: {
-		command: 'npm run wp-env start',
-		url: baseURL,
-		reuseExistingServer: !process.env.CI,
-		timeout: 120000,
-	},
 });

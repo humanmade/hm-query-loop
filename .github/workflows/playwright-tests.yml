@@ -31,10 +31,16 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Start WordPress environment
-        run: npm run wp-env start
+        run: |
+          npm run wp-env start
+          npm run wp-env run tests-cli "wp core version"
 
       - name: Run Playwright tests
         run: npm run test:e2e
+
+      - name: Stop WordPress environment
+        if: always()
+        run: npm run wp-env stop
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -43,11 +49,13 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
+          if-no-files-found: ignore
 
-      - name: Upload test videos
+      - name: Upload test videos and traces
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: test-videos
+          name: test-results
           path: test-results/
           retention-days: 7
+          if-no-files-found: ignore
