@@ -2,4 +2,22 @@
  * HM Query Loop Block Editor Styles
  */
 
-/* Add any editor-specific styles here if needed */
+/**
+ * Hide excess posts in editor when perPage override is set
+ * Uses CSS custom property --hm-query-loop-per-page to determine the limit
+ */
+.wp-block-post-template {
+	&[style*="--hm-query-loop-per-page"] {
+		/* Hide all list items by default */
+		> li {
+			display: none;
+		}
+
+		/* Show only the first N items based on --hm-query-loop-per-page */
+		@for $i from 1 through 50 {
+			&[style*="--hm-query-loop-per-page: #{$i}"] > li:nth-child(-n+#{$i}) {
+				display: block;
+			}
+		}
+	}
+}
