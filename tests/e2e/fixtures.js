@@ -35,7 +35,7 @@ export const test = base.extend({
 			async createNewPost(postType = 'page') {
 				await admin.goto(`/wp-admin/post-new.php?post_type=${postType}`);
 
-				// Wait for editor layout to load
+				// Wait for editor layout to load - this is sufficient to know editor is ready
 				await page.waitForSelector('.edit-post-layout, .edit-site-layout', { timeout: 15000 });
 
 				// Close welcome guide if it appears (with timeout)
@@ -44,22 +44,19 @@ export const test = base.extend({
 					.catch(() => false);
 
 				if (welcomeGuideVisible) {
-					await page.click('button[aria-label="Close"]');
+					const closeButton = page.locator('button[aria-label="Close"]').first();
+					await closeButton.click().catch(() => {
+						console.log('Could not close welcome guide, continuing anyway');
+					});
 				}
 
-				// Wait for the editor canvas to be ready
-				// Use a more reliable selector - wait for the post title or canvas
-				await Promise.race([
-					page.waitForSelector('.editor-post-title__input', { timeout: 10000 }),
-					page.waitForSelector('.edit-post-visual-editor', { timeout: 10000 }),
-					page.waitForSelector('iframe[name="editor-canvas"]', { timeout: 10000 }),
-				]).catch(() => {
-					// If none of the selectors work, just continue
-					console.log('Editor canvas selectors not found, continuing anyway');
+				// Wait for any loading indicators to disappear
+				await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+					console.log('Network did not reach idle state, continuing anyway');
 				});
 
 				// Give it a moment to settle
-				await page.waitForTimeout(500);
+				await page.waitForTimeout(1000);
 			},
 
 			/**

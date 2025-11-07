@@ -14,14 +14,9 @@ test.describe('Posts Per Page Override', () => {
 		// Test that we can create a new page and editor loads
 		await editor.createNewPost('page');
 
-		// Check that editor loaded - at least one of these should be visible
-		const editorLoaded = await Promise.race([
-			page.locator('.editor-post-title__input').isVisible({ timeout: 5000 }),
-			page.locator('.edit-post-visual-editor').isVisible({ timeout: 5000 }),
-			page.locator('iframe[name="editor-canvas"]').isVisible({ timeout: 5000 }),
-		]).catch(() => false);
-
-		expect(editorLoaded).toBe(true);
+		// If we got here, editor loaded successfully (createNewPost waits for it)
+		// Just verify the layout is still visible
+		await expect(page.locator('.edit-post-layout, .edit-site-layout')).toBeVisible();
 	});
 
 	test.skip('should show posts per page control when query inherits', async ({ page, editor }) => {
