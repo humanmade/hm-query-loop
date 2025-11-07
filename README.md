@@ -8,6 +8,8 @@ A WordPress plugin that extends the core Query Loop block with advanced controls
 
 When a Query Loop block is set to "Inherit query from template", you can now override the number of posts to display. This is useful when you want to show a different number of posts than the main query. Leave the field empty to use the default number of posts.
 
+**Editor Preview**: The posts per page override is now reflected in the editor preview, making it easier to see how your content will appear without needing to preview or publish the page.
+
 ### 2. Hide on Paginated Pages
 
 Toggle whether the query loop should be hidden when viewing page 2 or higher (when the `paged` query var is greater than 1). This is useful for creating layouts where different query loops appear on the first page vs subsequent pages.
@@ -34,6 +36,31 @@ Enable this option to automatically exclude posts that have been displayed by pr
 - `npm run lint:js` - Lint JavaScript files
 - `npm run lint:css` - Lint CSS/SCSS files
 - `npm run format` - Format all files
+
+### Testing
+
+The plugin includes end-to-end tests using Playwright and `@wordpress/scripts`.
+
+#### Running Tests
+
+1. Start the WordPress test environment:
+   ```bash
+   npm run wp-env start
+   ```
+
+2. Run the tests:
+   ```bash
+   npm run test:e2e
+   ```
+
+#### Additional Test Commands
+
+- `npm run test:e2e:debug` - Run tests in debug mode
+- `npm run test:e2e:watch` - Run tests in watch mode (reruns on changes)
+- `npm run wp-env stop` - Stop the WordPress environment
+- `npm run wp-env` - Access wp-env commands directly
+
+See [tests/e2e/README.md](tests/e2e/README.md) for more details on the test setup and writing tests.
 
 ## Usage
 

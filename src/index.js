@@ -6,6 +6,12 @@ import { createHigherOrderComponent } from '@wordpress/compose';
 import { InspectorControls } from '@wordpress/block-editor';
 import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import { useEffect } from '@wordpress/element';
+
+/**
+ * Styles
+ */
+import './index.scss';
 
 /**
  * Add custom attributes and context to the Query Loop block.
@@ -73,7 +79,7 @@ addFilter(
  */
 const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, attributes, setAttributes } = props;
+		const { name, attributes, setAttributes, clientId } = props;
 
 		if ( name !== 'core/query' ) {
 			return <BlockEdit { ...props } />;
@@ -83,6 +89,22 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		const { perPage, hideOnPaged, excludeDisplayed } = hmQueryLoop;
 
 		const isInheritQuery = query.inherit || false;
+
+		// Sync the perPage setting with the query perPage for non-inherited queries
+		// For inherited queries, sync it as well to show the override in the editor
+		useEffect( () => {
+			if ( perPage !== undefined && perPage > 0 ) {
+				// Try to update the query.perPage to reflect in the editor
+				if ( query.perPage !== perPage ) {
+					setAttributes( {
+						query: {
+							...query,
+							perPage,
+						},
+					} );
+				}
+			}
+		}, [ perPage ] );
 
 		return (
 			<>
@@ -174,6 +196,52 @@ addFilter(
 	'editor.BlockEdit',
 	'hm-query-loop/with-inspector-controls',
 	withInspectorControls
+);
+
+/**
+ * Add CSS to hide excess posts in the editor when perPage override is set.
+ */
+const withPostTemplateStyles = createHigherOrderComponent( ( BlockListBlock ) => {
+	return ( props ) => {
+		const { name, attributes, context } = props;
+
+		// Only apply to post-template blocks
+		if ( name !== 'core/post-template' ) {
+			return <BlockListBlock { ...props } />;
+		}
+
+		// Get the hmQueryLoop settings from context
+		const hmQueryLoopSettings = context?.[ 'hm-query-loop/settings' ] || {};
+		const { perPage } = hmQueryLoopSettings;
+
+		// If perPage is set, add custom styling to limit visible posts
+		if ( perPage && perPage > 0 ) {
+			const customStyle = {
+				'--hm-query-loop-per-page': perPage,
+			};
+
+			return (
+				<BlockListBlock
+					{ ...props }
+					wrapperProps={ {
+						...( props.wrapperProps || {} ),
+						style: {
+							...( props.wrapperProps?.style || {} ),
+							...customStyle,
+						},
+					} }
+				/>
+			);
+		}
+
+		return <BlockListBlock { ...props } />;
+	};
+}, 'withPostTemplateStyles' );
+
+addFilter(
+	'editor.BlockListBlock',
+	'hm-query-loop/with-post-template-styles',
+	withPostTemplateStyles
 );
 
 /**
