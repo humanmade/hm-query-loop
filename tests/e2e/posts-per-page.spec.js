@@ -21,30 +21,23 @@ function wpCli(command) {
 	}
 }
 
+// Generate dummy posts before running tests
+test.beforeAll(async () => {
+	console.log('Ensuring we have enough test posts...');
+
+	try {
+		const postsToGenerate = 20;
+		console.log(`Generating ${postsToGenerate} test posts...`);
+		wpCli(`wp post generate --count=${postsToGenerate} --post_type=post`);
+		console.log('Test posts generated successfully');
+	} catch (error) {
+		console.log('Error checking/generating posts:', error.message);
+		// Try to generate anyway
+		wpCli('wp post generate --count=20 --post_type=post');
+	}
+});
+
 test.describe('Posts Per Page Override', () => {
-	// Generate dummy posts before running tests
-	test.beforeAll(async () => {
-		console.log('Ensuring we have enough test posts...');
-
-		try {
-			// Count existing posts
-			const postCount = wpCli('wp post list --post_type=post --format=count').trim();
-			console.log(`Current post count: ${postCount}`);
-
-			// Only generate posts if we have fewer than 20
-			if (parseInt(postCount, 10) < 20) {
-				const postsToGenerate = 20 - parseInt(postCount, 10);
-				console.log(`Generating ${postsToGenerate} test posts...`);
-				wpCli(`wp post generate --count=${postsToGenerate} --post_type=post`);
-				console.log('Test posts generated successfully');
-			}
-		} catch (error) {
-			console.log('Error checking/generating posts:', error.message);
-			// Try to generate anyway
-			wpCli('wp post generate --count=20 --post_type=post');
-		}
-	});
-
 	test('should be able to access WordPress admin', async ({ admin, page }) => {
 		// Basic smoke test - can we reach WordPress?
 		await admin.visitAdminPage('index.php');
