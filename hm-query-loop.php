@@ -29,7 +29,7 @@ define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
  */
 function init() {
 	// Enqueue block editor assets.
-	add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\enqueue_block_editor_assets' );
+	add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\enqueue_block_editor_assets', 9 );
 
 	// Register block filters.
 	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 10, 3 );
@@ -41,8 +41,8 @@ function init() {
 	// Hook into the_posts to track displayed posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
 
-	// Add context to post-template block.
-	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_post_template_metadata' );
+	// Add contexts to query and post-template block.
+	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_block_metadata' );
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init' );
@@ -61,6 +61,15 @@ function enqueue_block_editor_assets() {
 		true
 	);
 
+	// Pass the posts_per_page setting to JavaScript
+	wp_localize_script(
+		'hm-query-loop-editor',
+		'hmQueryLoopSettings',
+		[
+			'postsPerPage' => (int) get_option( 'posts_per_page', 10 ),
+		]
+	);
+
 	wp_enqueue_style(
 		'hm-query-loop-editor',
 		HM_QUERY_LOOP_URL . 'build/index.css',
@@ -70,20 +79,25 @@ function enqueue_block_editor_assets() {
 }
 
 /**
- * Filter post-template block metadata to add usesContext.
+ * Filter block metadata to add context.
  *
  * @param array $metadata Block metadata.
  * @return array Modified metadata.
  */
-function filter_post_template_metadata( $metadata ) {
-	if ( $metadata['name'] !== 'core/post-template' ) {
-		return $metadata;
+function filter_block_metadata( $metadata ) {
+	if ( $metadata['name'] === 'core/query' ) {
+		$metadata['providesContext'] = array_merge(
+			$metadata['providesContext'] ?? [],
+			[ 'hm-query-loop/settings' ]
+		);
 	}
 
-	$metadata['usesContext'] = array_merge(
-		$metadata['usesContext'] ?? [],
-		[ 'hm-query-loop/settings' ]
-	);
+	if ( $metadata['name'] === 'core/post-template' ) {
+		$metadata['usesContext'] = array_merge(
+			$metadata['usesContext'] ?? [],
+			[ 'hm-query-loop/settings' ]
+		);
+	}
 
 	return $metadata;
 }
