@@ -24,6 +24,7 @@ Thumbs.db
 .wp-env/
 
 # Test artifacts
+.auth/
 test-results/
 playwright-report/
 playwright/.cache/

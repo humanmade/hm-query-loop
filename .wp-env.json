@@ -4,7 +4,8 @@
 		"."
 	],
 	"themes": [
-		"WordPress/twentytwentyfour"
+		"WordPress/twentytwentyfour",
+		"WordPress/twentytwentyfive"
 	],
 	"port": 8888,
 	"testsPort": 8889,
@@ -15,7 +16,8 @@
 	"env": {
 		"tests": {
 			"themes": [
-				"WordPress/twentytwentyfour"
+				"WordPress/twentytwentyfour",
+				"WordPress/twentytwentyfive"
 			]
 		}
 	}

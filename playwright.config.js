@@ -7,6 +7,8 @@ const baseURL = process.env.WP_BASE_URL || 'http://localhost:8889';
  */
 module.exports = defineConfig({
 	testDir: './tests/e2e',
+	/* Global setup to log in to WordPress */
+	globalSetup: require.resolve('./tests/e2e/global-setup.js'),
 	/* Test timeout */
 	timeout: 60000,
 	/* Run tests in files in parallel */
@@ -27,6 +29,8 @@ module.exports = defineConfig({
 		video: 'retain-on-failure',
 		actionTimeout: 15000,
 		navigationTimeout: 30000,
+		// Use the saved authentication state
+		storageState: '.auth/wordpress.json',
 	},
 
 	/* Configure projects for major browsers */

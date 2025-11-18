@@ -1,133 +1,112 @@
-const { test: base, expect } = require('@playwright/test');
+const { test: base, expect } = require('@wordpress/e2e-test-utils-playwright');
 
 /**
- * WordPress test fixtures with admin login and utilities.
+ * Extended test fixtures with additional utilities.
  */
 export const test = base.extend({
 	/**
-	 * Navigate to WordPress admin and log in if needed.
+	 * Custom editor utilities extending the base Editor.
 	 */
-	admin: async ({ page }, use) => {
-		await page.goto('/wp-admin');
-
-		// Check if we need to log in
-		const loginForm = page.locator('#loginform');
-		const isLoginPage = await loginForm.isVisible({ timeout: 5000 }).catch(() => false);
-
-		if (isLoginPage) {
-			await page.fill('#user_login', 'admin');
-			await page.fill('#user_pass', 'password');
-			await page.click('#wp-submit');
-			await page.waitForURL('**/wp-admin/**', { timeout: 10000 });
-		}
-
-		await use(page);
-	},
-
-	/**
-	 * Utilities for working with the block editor.
-	 */
-	editor: async ({ page, admin }, use) => {
-		const editorUtils = {
+	siteEditor: async ({ admin, editor, page }, use) => {
+		const siteEditorUtils = {
 			/**
-			 * Create a new page/post in the editor.
+			 * Navigate to the site editor to edit a template.
 			 */
-			async createNewPost(postType = 'page') {
-				await admin.goto(`/wp-admin/post-new.php?post_type=${postType}`);
+			async visitSiteEditor(templateSlug = 'index', theme = 'twentytwentyfive') {
+				const templateId = `${theme}//${templateSlug}`;
+				await admin.visitAdminPage(`site-editor.php?postId=${encodeURIComponent(templateId)}&postType=wp_template&canvas=edit`);
 
-				// Wait for editor layout to load
-				await page.waitForSelector('.edit-post-layout, .edit-site-layout', { timeout: 15000 });
+				// Wait for site editor to load
+				await page.waitForSelector('.edit-site-layout, iframe[name="editor-canvas"]', { timeout: 15000 });
 
-				// Close welcome guide if it appears (with timeout)
-				const welcomeGuideVisible = await page.locator('.edit-post-welcome-guide')
+				// Dismiss "Edit your site" modal if it appears
+				const editSiteModalVisible = await page.locator('text=Edit your site')
+					.isVisible({ timeout: 2000 })
+					.catch(() => false);
+
+				if (editSiteModalVisible) {
+					const getStartedButton = page.locator('button:has-text("Get started")');
+					const isGetStartedVisible = await getStartedButton.isVisible({ timeout: 1000 }).catch(() => false);
+					if (isGetStartedVisible) {
+						await getStartedButton.click();
+						await page.waitForTimeout(500);
+					}
+				}
+
+				// Close welcome guide if it appears
+				const welcomeGuideVisible = await page.locator('.edit-site-welcome-guide, .edit-post-welcome-guide')
 					.isVisible({ timeout: 2000 })
 					.catch(() => false);
 
 				if (welcomeGuideVisible) {
-					await page.click('button[aria-label="Close"]');
+					const closeButton = page.locator('button[aria-label="Close"]');
+					const isCloseButtonVisible = await closeButton.isVisible({ timeout: 1000 }).catch(() => false);
+					if (isCloseButtonVisible) {
+						await closeButton.click();
+						await page.waitForTimeout(500);
+					}
 				}
 
-				// Wait for the editor canvas to be ready
-				// Use a more reliable selector - wait for the post title or canvas
-				await Promise.race([
-					page.waitForSelector('.editor-post-title__input', { timeout: 10000 }),
-					page.waitForSelector('.edit-post-visual-editor', { timeout: 10000 }),
-					page.waitForSelector('iframe[name="editor-canvas"]', { timeout: 10000 }),
-				]).catch(() => {
-					// If none of the selectors work, just continue
-					console.log('Editor canvas selectors not found, continuing anyway');
-				});
-
-				// Give it a moment to settle
-				await page.waitForTimeout(500);
+				// Give the editor time to initialize
+				await page.waitForTimeout(1000);
 			},
 
 			/**
-			 * Insert a block by name.
+			 * Select a block by its name using the WordPress data API.
+			 * @param {string} blockName - The block name (e.g., 'core/query').
+			 * @param {number} index - The index of the block to select (default: 0).
 			 */
-			async insertBlock(blockName) {
-				// Click the block inserter
-				await page.click('button[aria-label="Toggle block inserter"]');
-				await page.fill('input[placeholder="Search"]', blockName);
-
-				// Wait for search results
-				await page.waitForTimeout(500);
-
-				// Click the first result
-				await page.click(`.editor-block-list-item-core-${blockName.replace('/', '-')}, .editor-block-list-item-${blockName.replace('/', '-')}`);
+			async selectBlockByName(blockName, index = 0) {
+				await page.evaluate(
+					({ name, idx }) => {
+						const blocks = window.wp.data.select('core/block-editor').getBlocksByName(name);
+						if (blocks.length > idx) {
+							window.wp.data.dispatch('core/block-editor').selectBlock(blocks[idx]);
+						}
+					},
+					{ name: blockName, idx: index }
+				);
+				await page.waitForTimeout(1000);
 			},
 
 			/**
-			 * Open block settings sidebar.
+			 * Open the settings sidebar and wait for it to be ready.
 			 */
-			async openBlockSettings() {
-				const settingsButton = page.locator('button[aria-label="Settings"]');
-				const isExpanded = await settingsButton.getAttribute('aria-expanded');
+			async openSettingsSidebar() {
+				await editor.openDocumentSettingsSidebar();
+				await page.waitForTimeout(1000);
+			},
 
+			/**
+			 * Expand a settings panel if it's not already open.
+			 * @param {string} panelTitle - The title text of the panel to expand.
+			 */
+			async expandPanel(panelTitle) {
+				const panel = page.locator(`.components-panel__body-title:has-text("${panelTitle}")`);
+				const isExpanded = await panel.locator('button').getAttribute('aria-expanded');
 				if (isExpanded !== 'true') {
-					await settingsButton.click();
+					await panel.locator('button').click();
 					await page.waitForTimeout(300);
 				}
 			},
 
 			/**
-			 * Publish the post/page.
+			 * Get the Posts per page input control.
+			 * @returns {Locator} The input element locator.
 			 */
-			async publish() {
-				// Click publish button
-				const publishButton = page.locator('button.editor-post-publish-button__button, button.editor-post-publish-panel__toggle');
-				await publishButton.first().click();
-
-				// If there's a pre-publish panel, click publish again
-				const prePublishButton = page.locator('.editor-post-publish-panel__header-publish-button button');
-				const hasPrePublish = await prePublishButton.isVisible({ timeout: 2000 }).catch(() => false);
-
-				if (hasPrePublish) {
-					await prePublishButton.click();
-				}
-
-				// Wait for success notice
-				await page.waitForSelector('.components-snackbar', { timeout: 10000 });
+			getPostsPerPageInput() {
+				return page.locator('label:has-text("Posts per page (Override)")').locator('..').locator('input[type="number"]');
 			},
 
 			/**
-			 * Get the permalink from the editor.
+			 * Get the editor canvas from the site editor.
 			 */
-			async getPermalink() {
-				// Open post publish panel if not already open
-				const panel = page.locator('.editor-post-publish-panel');
-				const isPanelVisible = await panel.isVisible({ timeout: 2000 }).catch(() => false);
-
-				if (!isPanelVisible) {
-					await this.publish();
-				}
-
-				const permalink = await page.locator('.post-publish-panel__postpublish-post-address input').inputValue();
-				return permalink;
+			get canvas() {
+				return editor.canvas;
 			},
 		};
 
-		await use(editorUtils);
+		await use(siteEditorUtils);
 	},
 });
 
