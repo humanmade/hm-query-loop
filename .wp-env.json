@@ -1,0 +1,24 @@
+{
+	"core": "WordPress/WordPress#6.7.1",
+	"plugins": [
+		"."
+	],
+	"themes": [
+		"WordPress/twentytwentyfour",
+		"WordPress/twentytwentyfive"
+	],
+	"port": 8888,
+	"testsPort": 8889,
+	"config": {
+		"WP_DEBUG": true,
+		"SCRIPT_DEBUG": true
+	},
+	"env": {
+		"tests": {
+			"themes": [
+				"WordPress/twentytwentyfour",
+				"WordPress/twentytwentyfive"
+			]
+		}
+	}
+}

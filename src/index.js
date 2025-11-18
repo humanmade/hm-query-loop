@@ -3,9 +3,15 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { InspectorControls } from '@wordpress/block-editor';
+import { InspectorControls, useBlockEditContext, useBlockProps } from '@wordpress/block-editor';
 import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import { useEffect } from '@wordpress/element';
+
+/**
+ * Styles
+ */
+import './index.scss';
 
 /**
  * Add custom attributes and context to the Query Loop block.
@@ -73,7 +79,7 @@ addFilter(
  */
 const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, attributes, setAttributes } = props;
+		const { name, attributes, setAttributes, clientId } = props;
 
 		if ( name !== 'core/query' ) {
 			return <BlockEdit { ...props } />;
@@ -83,6 +89,23 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		const { perPage, hideOnPaged, excludeDisplayed } = hmQueryLoop;
 
 		const isInheritQuery = query.inherit || false;
+		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
+
+		// Sync the perPage setting with the query perPage for non-inherited queries
+		// For inherited queries, sync it as well to show the override in the editor
+		useEffect( () => {
+			if ( perPage !== undefined && perPage > 0 ) {
+				// Try to update the query.perPage to reflect in the editor
+				if ( query.perPage !== perPage ) {
+					setAttributes( {
+						query: {
+							...query,
+							perPage,
+						},
+					} );
+				}
+			}
+		}, [ perPage ] );
 
 		return (
 			<>
@@ -99,7 +122,7 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 									'hm-query-loop'
 								) }
 								help={ __(
-									'Override the number of posts to show when inheriting the query. Leave empty to use the default.',
+									'Override the number of posts to show when inheriting the query. Maximum value is limited to the site\'s posts per page setting.',
 									'hm-query-loop'
 								) }
 								type="number"
@@ -115,6 +138,7 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 									} );
 								} }
 								min={ 1 }
+								max={ maxPerPage }
 							/>
 						) }
 						{ ! isInheritQuery && perPage && (
@@ -174,6 +198,52 @@ addFilter(
 	'editor.BlockEdit',
 	'hm-query-loop/with-inspector-controls',
 	withInspectorControls
+);
+
+/**
+ * Add CSS to hide excess posts in the editor when perPage override is set.
+ */
+const withPostTemplateStyles = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, context, clientId } = props;
+
+		// Only apply to post-template blocks
+		if ( name !== 'core/post-template' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		// Get the hmQueryLoop settings from context
+		const hmQueryLoopSettings = context?.[ 'hm-query-loop/settings' ] || {};
+		const { perPage } = hmQueryLoopSettings;
+
+		// If perPage is set, add custom styling to limit visible posts
+		if ( perPage && perPage > 0 ) {
+			// Generate a unique selector for this block instance
+			const blockSelector = `[data-block="${ clientId }"]`;
+
+			// Create inline style to hide posts after the perPage limit
+			const inlineStyle = `
+				${ blockSelector } .wp-block-post:nth-child(n+${ perPage + 2 }) {
+					display: none !important;
+				}
+			`;
+
+			return (
+				<>
+					<style>{ inlineStyle }</style>
+					<BlockEdit { ...props } />
+				</>
+			);
+		}
+
+		return <BlockEdit { ...props } />;
+	};
+}, 'withPostTemplateStyles' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-post-template-styles',
+	withPostTemplateStyles
 );
 
 /**

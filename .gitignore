@@ -20,4 +20,13 @@ Thumbs.db
 *.swo
 *~
 
+# WordPress environment
+.wp-env/
+
+# Test artifacts
+.auth/
+test-results/
+playwright-report/
+playwright/.cache/
+
 /vendor/
