@@ -12,7 +12,7 @@
 		"lint:css": "wp-scripts lint-style",
 		"format": "wp-scripts format",
 		"wp-env": "wp-env",
-		"test:e2e": "wp-scripts test-playwright --reporter=list",
+		"test:e2e": "wp-scripts test-playwright",
 		"test:e2e:debug": "wp-scripts test-playwright --debug",
 		"test:e2e:watch": "wp-scripts test-playwright --watch"
 	},
