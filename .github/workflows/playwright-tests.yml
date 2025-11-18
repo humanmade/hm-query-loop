@@ -79,7 +79,7 @@ jobs:
         uses: daun/playwright-report-comment@v3
         if: always() && github.event_name == 'pull_request'
         with:
-          report-file: playwright-report/index.html
+          report-file: test-results/results.json
 
       - name: Fail if tests failed
         if: steps.tests.outcome == 'failure'

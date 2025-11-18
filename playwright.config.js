@@ -23,10 +23,13 @@ module.exports = defineConfig({
 	reporter: process.env.CI
 		? [
 				['list'],
-				['html'],
 				['json', { outputFile: 'test-results/results.json' }],
 		  ]
-		: 'html',
+		: [
+			['list'],
+			['html'],
+			['json', { outputFile: 'test-results/results.json' }],
+		  ],
 	/* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
 	use: {
 		baseURL,
