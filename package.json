@@ -1,24 +1,26 @@
 {
-	"name": "hm-query-loop",
-	"version": "1.0.0",
-	"description": "Extends the Query Loop block with advanced controls for multiple query loops on a single page",
-	"author": "Human Made",
-	"license": "GPL-2.0-or-later",
-	"main": "build/index.js",
-	"scripts": {
-		"build": "wp-scripts build",
-		"start": "wp-scripts start",
-		"lint:js": "wp-scripts lint-js",
-		"lint:css": "wp-scripts lint-style",
-		"format": "wp-scripts format",
-		"wp-env": "wp-env",
-		"test:e2e": "wp-scripts test-playwright",
-		"test:e2e:debug": "wp-scripts test-playwright --debug",
-		"test:e2e:watch": "wp-scripts test-playwright --watch"
-	},
-	"devDependencies": {
-		"@wordpress/e2e-test-utils-playwright": "^1.35.0",
-		"@wordpress/env": "^9.0.0",
-		"@wordpress/scripts": "^27.0.0"
-	}
+  "name": "hm-query-loop",
+  "version": "1.0.0",
+  "description": "Extends the Query Loop block with advanced controls for multiple query loops on a single page",
+  "author": "Human Made",
+  "license": "GPL-2.0-or-later",
+  "main": "build/index.js",
+  "scripts": {
+    "build": "wp-scripts build",
+    "start": "wp-scripts start",
+    "lint:js": "wp-scripts lint-js",
+    "lint:css": "wp-scripts lint-style",
+    "format": "wp-scripts format",
+    "wp-env": "wp-env",
+    "test:e2e": "wp-scripts test-playwright",
+    "test:e2e:debug": "wp-scripts test-playwright --debug",
+    "test:e2e:watch": "wp-scripts test-playwright --watch"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.10.1",
+    "@wordpress/e2e-test-utils-playwright": "^1.35.0",
+    "@wordpress/env": "^9.0.0",
+    "@wordpress/scripts": "^27.0.0"
+  }
 }
