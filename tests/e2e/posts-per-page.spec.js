@@ -1,16 +1,7 @@
 /**
  * Test the Posts Per Page override functionality.
  */
-const { test, expect, wpCli } = require('./fixtures');
-
-// Generate dummy posts before running tests
-test.beforeAll(async () => {
-	console.log(`Generating 20 test posts...`);
-	const ids = wpCli('wp post list --post_type=post --format=ids');
-	wpCli(`wp post delete 1 ${ids} --force`);
-	wpCli(`wp post generate --count=20 --post_type=post`);
-	console.log('Test posts generated successfully');
-});
+const { test, expect } = require('./fixtures');
 
 test.describe('Posts Per Page Override', () => {
 	test('should be able to access WordPress admin', async ({ admin, page }) => {

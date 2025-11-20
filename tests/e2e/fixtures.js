@@ -170,3 +170,8 @@ export function wpCli(command) {
 		throw error;
 	}
 }
+
+export function resetDatabase() {
+	console.log(`Importing database fixture`);
+	wpCli(`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`);
+}
