@@ -35,10 +35,10 @@ function init() {
 	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 10, 3 );
 	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 10, 2 );
 
-	// Hook pre_get_posts to modify the query.
+	// Hook query_loop_block_query_vars to modify the query.
 	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 10, 2 );
 
-	// Hook into the_posts to track displayed posts.
+	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
 
 	// Add contexts to query and post-template block.
@@ -110,6 +110,14 @@ function filter_block_metadata( $metadata ) {
 $displayed_post_ids = [];
 
 /**
+ * Track used post IDs within each query loop block.
+ * Keyed by block ID to scope posts to each query loop.
+ *
+ * @var array
+ */
+$query_loop_used_posts = [];
+
+/**
  * Get displayed post IDs.
  *
  * @return array
@@ -130,6 +138,31 @@ function add_displayed_post_ids( $post_ids ) {
 		$displayed_post_ids = [];
 	}
 	$displayed_post_ids = array_unique( array_merge( $displayed_post_ids, $post_ids ) );
+}
+
+/**
+ * Get used post IDs for a specific query loop.
+ *
+ * @param string $query_id Query loop block ID.
+ * @return array
+ */
+function get_query_loop_used_posts( $query_id ) {
+	global $query_loop_used_posts;
+	return $query_loop_used_posts[ $query_id ] ?? [];
+}
+
+/**
+ * Add used post IDs for a specific query loop.
+ *
+ * @param string $query_id Query loop block ID.
+ * @param array  $post_ids Post IDs to add.
+ */
+function add_query_loop_used_posts( $query_id, $post_ids ) {
+	global $query_loop_used_posts;
+	if ( ! isset( $query_loop_used_posts[ $query_id ] ) ) {
+		$query_loop_used_posts[ $query_id ] = [];
+	}
+	$query_loop_used_posts[ $query_id ] = array_unique( array_merge( $query_loop_used_posts[ $query_id ], $post_ids ) );
 }
 
 /**
@@ -178,7 +211,6 @@ function pre_render_block( $pre_render, $parsed_block ) {
  * @return string Block content.
  */
 function render_block( $block_content, $block ) {
-	// Only process core/query blocks.
 	if ( 'core/query' !== $block['blockName'] ) {
 		return $block_content;
 	}
@@ -204,6 +236,14 @@ function render_block( $block_content, $block ) {
  * @return array The modified query vars.
  */
 function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
+	if ( $block->name === 'core/post-template' ) {
+		$attrs = $block->parsed_block['attrs'];
+		if ( empty( $attrs['hmQueryLoop']['perPage'] ) ) {
+			return $query;
+		}
+		$attrs['hmQueryLoop']['excludeDisplayedForCurrentLoop'] = $block->context['queryId'];
+		return modify_query_from_block_attrs( $query, $attrs );
+	}
 	return modify_query_from_block_attrs( $query, $block->context );
 }
 
@@ -248,6 +288,19 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 		}
 	}
 
+	// Exclude already displayed posts for this loop if enabled.
+	if ( isset( $settings['excludeDisplayedForCurrentLoop'] ) && $settings['excludeDisplayedForCurrentLoop'] ) {
+		$query['query_id'] = $settings['excludeDisplayedForCurrentLoop'];
+		$displayed_ids = get_query_loop_used_posts( $settings['excludeDisplayedForCurrentLoop'] );
+		if ( ! empty( $displayed_ids ) ) {
+			$existing_exclusions = $query['post__not_in'] ?? [];
+			if ( ! is_array( $existing_exclusions ) ) {
+				$existing_exclusions = [];
+			}
+			$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $displayed_ids ) );
+		}
+	}
+
 	return $query;
 }
 
@@ -267,6 +320,7 @@ function track_displayed_posts( $posts, $query ) {
 	if ( ! empty( $posts ) ) {
 		$post_ids = wp_list_pluck( $posts, 'ID' );
 		add_displayed_post_ids( $post_ids );
+		add_query_loop_used_posts( $query->get( 'query_id', -1 ), $post_ids );
 	}
 
 	return $posts;

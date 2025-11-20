@@ -108,6 +108,47 @@ export const test = base.extend({
 
 		await use(siteEditorUtils);
 	},
+
+	/**
+	 * Helper to select a block by name using the WordPress data API.
+	 */
+	selectBlock: async ({ page }, use) => {
+		const selectBlock = {
+			/**
+			 * Select a block by its name.
+			 * @param {string} blockName - The block name (e.g., 'core/post-template').
+			 * @param {number} index - The index of the block to select (default: 0).
+			 */
+			async byName(blockName, index = 0) {
+				await page.evaluate(
+					({ name, idx }) => {
+						const blocks = window.wp.data.select('core/block-editor').getBlocksByName(name);
+						if (blocks.length > idx) {
+							window.wp.data.dispatch('core/block-editor').selectBlock(blocks[idx]);
+						}
+					},
+					{ name: blockName, idx: index }
+				);
+				await page.waitForTimeout(500);
+			},
+
+			/**
+			 * Select a block by its client ID.
+			 * @param {string} clientId - The block's client ID.
+			 */
+			async byId(clientId) {
+				await page.evaluate(
+					(id) => {
+						window.wp.data.dispatch('core/block-editor').selectBlock(id);
+					},
+					clientId
+				);
+				await page.waitForTimeout(500);
+			},
+		};
+
+		await use(selectBlock);
+	},
 });
 
 export { expect };
