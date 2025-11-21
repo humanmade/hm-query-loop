@@ -3,15 +3,23 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { InspectorControls, useBlockEditContext, useBlockProps } from '@wordpress/block-editor';
+import { useSelect } from '@wordpress/data';
+import { InspectorControls } from '@wordpress/block-editor';
 import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { useEffect } from '@wordpress/element';
+import { useEffect, createContext, useContext } from '@wordpress/element';
 
 /**
  * Styles
  */
 import './index.scss';
+
+/**
+ * Create a context for tracking used post IDs within a query loop in the editor.
+ */
+const UsedPostsContext = createContext({
+	postTemplates: [],
+});
 
 /**
  * Add custom attributes and context to the Query Loop block.
@@ -48,7 +56,7 @@ addFilter(
 );
 
 /**
- * Add usesContext to core/post-template block.
+ * Add usesContext and attributes to core/post-template block.
  *
  * @param {object} settings Block settings.
  * @param {string} name     Block name.
@@ -61,6 +69,13 @@ function addPostTemplateContext( settings, name ) {
 
 	return {
 		...settings,
+		attributes: {
+			...settings.attributes,
+			hmQueryLoop: {
+				type: 'object',
+				default: {},
+			},
+		},
 		usesContext: [
 			...( settings.usesContext || [] ),
 			'hm-query-loop/settings',
@@ -79,7 +94,7 @@ addFilter(
  */
 const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, attributes, setAttributes, clientId } = props;
+		const { name, attributes, setAttributes } = props;
 
 		if ( name !== 'core/query' ) {
 			return <BlockEdit { ...props } />;
@@ -201,42 +216,180 @@ addFilter(
 );
 
 /**
+ * Add custom controls to the Post Template block inspector.
+ */
+const withPostTemplateInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, attributes, setAttributes, context } = props;
+
+		if ( name !== 'core/post-template' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		const { hmQueryLoop = {} } = attributes;
+		const { perPage } = hmQueryLoop;
+
+		// Get query context
+		const queryContext = context?.query || {};
+		const isInheritQuery = queryContext.inherit || false;
+
+		// Get the max per page from query block's perPage or site default
+		const queryPerPage = context?.query?.perPage || window.hmQueryLoopSettings?.postsPerPage || 10;
+
+		return (
+			<>
+				<BlockEdit { ...props } />
+				{ ! isInheritQuery && (
+					<InspectorControls>
+						<PanelBody
+							title={ __( 'Post Template Settings', 'hm-query-loop' ) }
+							initialOpen={ false }
+						>
+							<TextControl
+								label={ __(
+									'Posts per template',
+									'hm-query-loop'
+								) }
+								help={ __(
+									'Set the number of posts to show in this post template block. Leave empty to show all remaining posts.',
+									'hm-query-loop'
+								) }
+								type="number"
+								value={ perPage ?? '' }
+								onChange={ ( value ) => {
+									const numValue =
+										value === '' ? undefined : parseInt( value, 10 );
+									setAttributes( {
+										hmQueryLoop: {
+											...hmQueryLoop,
+											perPage: numValue,
+										},
+									} );
+								} }
+								min={ 1 }
+								max={ queryPerPage }
+							/>
+						</PanelBody>
+					</InspectorControls>
+				) }
+			</>
+		);
+	};
+}, 'withPostTemplateInspectorControls' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-post-template-inspector-controls',
+	withPostTemplateInspectorControls
+);
+
+/**
+ * Wrap Query Loop block with UsedPostsContext provider.
+ */
+const withQueryLoopContextProvider = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, clientId } = props;
+
+		if ( name !== 'core/query' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		const postTemplates = useSelect( select => {
+			const { getBlock, getBlocksByName, getBlockParentsByBlockName } = select( 'core/block-editor' );
+			const postTemplateClientIds = getBlocksByName( 'core/post-template' );
+			const childPostTemplatesClientIds = postTemplateClientIds.filter( postTemplateClientId => {
+				const parentQueryClientIds = getBlockParentsByBlockName( postTemplateClientId, 'core/query' );
+				return parentQueryClientIds.indexOf( clientId ) > -1;
+			} );
+			return childPostTemplatesClientIds.map( getBlock );
+		}, [ clientId ] );
+
+		return (
+			<UsedPostsContext.Provider value={ { postTemplates } }>
+				<BlockEdit { ...props } />
+			</UsedPostsContext.Provider>
+		);
+	};
+}, 'withQueryLoopContextProvider' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-query-loop-context-provider',
+	withQueryLoopContextProvider
+);
+
+/**
  * Add CSS to hide excess posts in the editor when perPage override is set.
  */
 const withPostTemplateStyles = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, context, clientId } = props;
+		const { name, context, clientId, attributes } = props;
 
 		// Only apply to post-template blocks
 		if ( name !== 'core/post-template' ) {
 			return <BlockEdit { ...props } />;
 		}
 
-		// Get the hmQueryLoop settings from context
+		// Get the hmQueryLoop settings from context (query block level)
 		const hmQueryLoopSettings = context?.[ 'hm-query-loop/settings' ] || {};
-		const { perPage } = hmQueryLoopSettings;
+		const queryLevelPerPage = hmQueryLoopSettings.perPage;
 
-		// If perPage is set, add custom styling to limit visible posts
-		if ( perPage && perPage > 0 ) {
-			// Generate a unique selector for this block instance
-			const blockSelector = `[data-block="${ clientId }"]`;
+		// Get the hmPostTemplate settings from attributes (post-template block level)
+		const hmQueryLoop = attributes?.hmQueryLoop || {};
+		const postTemplateLevelPerPage = hmQueryLoop.perPage;
 
-			// Create inline style to hide posts after the perPage limit
-			const inlineStyle = `
-				${ blockSelector } .wp-block-post:nth-child(n+${ perPage + 2 }) {
-					display: none !important;
-				}
-			`;
+		// Determine which perPage to use
+		// Priority: post-template level > query level
+		let perPage = postTemplateLevelPerPage || queryLevelPerPage;
 
-			return (
-				<>
-					<style>{ inlineStyle }</style>
-					<BlockEdit { ...props } />
-				</>
-			);
+		// Get the list of child post templates for the current query loop.
+		const { postTemplates } = useContext( UsedPostsContext );
+
+		// Calculate the offset based on other postTemplates per page setting.
+		let offset = 0;
+
+		for ( const postTemplate of postTemplates ) {
+			if ( postTemplate.clientId !== clientId ) {
+				offset += postTemplate.attributes?.hmQueryLoop?.perPage || 0;
+			} else {
+				break;
+			}
 		}
 
-		return <BlockEdit { ...props } />;
+		// Generate a unique selector for this block instance
+		const blockSelector = `[data-block="${ clientId }"]`;
+
+		// Create inline style to hide posts before offset and after perPage limit
+		const hideBeforeOffset = offset > 0 ? `
+			${ blockSelector } :is(.wp-block-post:not([style*="display: none"])):nth-of-type(-n+${ offset }) {
+				display: none !important;
+			}
+		` : '';
+
+		const hideAfterLimit = `
+			${ blockSelector } :is(.wp-block-post:not([style*="display: none"])):nth-of-type(n+${ offset + perPage + 2 }) {
+				display: none !important;
+			}
+		`;
+
+		// When a subsequent post-template is shown with a positive offset, the initial dropzone placeholder
+		// and hidden preview block cause the CSS hiding to be off by one. Each post template actually contains
+		// posts per page + 1 hidden preview instance of .wp-block-post. The currently selected preview becomes
+		// hidden and the dropzone/editable post instance created just before it.
+		const hideFirstInitial = offset > 0 ? `
+			${ blockSelector }:has(.wp-block-post[data-is-drop-zone]:first-child) :is(.wp-block-post:not([style*="display: none"])):nth-of-type(-n+${ offset + 1 }) {
+				display: none !important;
+			}
+		` : '';
+
+		const inlineStyle = hideBeforeOffset + hideAfterLimit + hideFirstInitial;
+
+		return (
+			<>
+				<style>{ inlineStyle }</style>
+				<BlockEdit { ...props } />
+			</>
+		);
 	};
 }, 'withPostTemplateStyles' );
 

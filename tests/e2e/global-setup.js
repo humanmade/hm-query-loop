@@ -1,9 +1,12 @@
 const { chromium } = require('@playwright/test');
+const { resetDatabase } = require('./fixtures');
 
 /**
  * Global setup to log in to WordPress and save the authentication state.
  */
 module.exports = async (config) => {
+	resetDatabase();
+
 	const baseURL = process.env.WP_BASE_URL || 'http://localhost:8889';
 	const username = process.env.WP_USERNAME || 'admin';
 	const password = process.env.WP_PASSWORD || 'password';
