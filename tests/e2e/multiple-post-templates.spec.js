@@ -81,7 +81,7 @@ test.describe('Multiple Post Templates', () => {
 		await page.getByRole('spinbutton', { name: 'Posts per template' }).click();
 		await page.getByRole('spinbutton', { name: 'Posts per template' }).fill('1');
 		await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
-		await page.getByRole('menuitem', { name: 'Duplicate ⇧⌘D' }).click();
+		await page.getByRole('menuitem', { name: /^Duplicate / }).click();
 		await page.getByRole('button', { name: 'Grid view' }).click();
 		await page.getByRole('button', { name: 'Post Template Settings' }).click();
 		await page.getByRole('spinbutton', { name: 'Posts per template' }).click();
@@ -91,7 +91,7 @@ test.describe('Multiple Post Templates', () => {
 		await page.getByRole('spinbutton', { name: 'Columns' }).press('Shift+ArrowLeft');
 		await page.getByRole('spinbutton', { name: 'Columns' }).fill('2');
 		await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
-		await page.getByRole('menuitem', { name: 'Duplicate ⇧⌘D' }).click();
+		await page.getByRole('menuitem', { name: /^Duplicate / }).click();
 		await page.getByRole('spinbutton', { name: 'Columns' }).click();
 		await page.getByRole('spinbutton', { name: 'Columns' }).press('Shift+ArrowLeft');
 		await page.getByRole('spinbutton', { name: 'Columns' }).fill('3');
