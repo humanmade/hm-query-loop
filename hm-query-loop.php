@@ -289,7 +289,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	}
 
 	// Exclude already displayed posts for this loop if enabled.
-	if ( isset( $settings['excludeDisplayedForCurrentLoop'] ) && $settings['excludeDisplayedForCurrentLoop'] ) {
+	if ( isset( $settings['excludeDisplayedForCurrentLoop'] ) ) {
 		$query['query_id'] = $settings['excludeDisplayedForCurrentLoop'];
 		$displayed_ids = get_query_loop_used_posts( $settings['excludeDisplayedForCurrentLoop'] );
 		if ( ! empty( $displayed_ids ) ) {

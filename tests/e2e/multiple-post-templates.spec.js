@@ -65,8 +65,9 @@ test.describe('Multiple Post Templates', () => {
 	test('should support multiple post-template blocks with different post limits', async ({ page, admin, editor, selectBlock }) => {
 		// Create a new page
 		await admin.createNewPost({ postType: 'page' });
-		await page.waitForTimeout(1000);
+		await page.waitForTimeout(1500);
 		await page.getByRole('button', { name: 'Close' }).click();
+		await editor.openDocumentSettingsSidebar();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).fill('test');
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Add default block' }).click();
