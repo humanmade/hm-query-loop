@@ -131,15 +131,9 @@ test.describe('Multiple Post Templates', () => {
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Start blank' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Image, Date, & Title' }).click();
 
-		// Select the query loop block and set its posts per page to 6
-		await page.locator('iframe[name="editor-canvas"]').contentFrame().locator('.components-placeholder__illustration').first().click();
-		await page.getByRole('button', { name: 'Select parent block: Query' }).click();
-		await page.getByRole('button', { name: 'Settings', exact: true }).click();
-		await page.getByRole('spinbutton', { name: 'Items' }).click();
-		await page.getByRole('spinbutton', { name: 'Items' }).fill('6');
-
 		// Configure first post template: 1 post
-		await selectBlock.byName('core/post-template', 0);
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().locator('.components-placeholder__illustration').first().click();
+		await page.getByRole('button', { name: 'Select parent block: Post' }).click();
 		await page.getByRole('button', { name: 'Post Template Settings' }).click();
 		await page.getByRole('spinbutton', { name: 'Posts per template' }).click();
 		await page.getByRole('spinbutton', { name: 'Posts per template' }).fill('1');
@@ -162,7 +156,7 @@ test.describe('Multiple Post Templates', () => {
 		await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
 		await page.getByRole('menuitem', { name: /^Duplicate / }).click();
 
-		// Configure third post template: leave Posts per template EMPTY (should auto-calculate to 3)
+		// Configure third post template: leave Posts per template EMPTY (should auto-calculate to 7)
 		await page.getByRole('spinbutton', { name: 'Columns' }).click();
 		await page.getByRole('spinbutton', { name: 'Columns' }).press('Shift+ArrowLeft');
 		await page.getByRole('spinbutton', { name: 'Columns' }).fill('3');
@@ -187,12 +181,12 @@ test.describe('Multiple Post Templates', () => {
 		console.log('Post titles found:', postTitles);
 		console.log('Total posts:', postTitles.length);
 
-		// Should have exactly 6 posts total (1 + 2 + 3 auto-calculated)
-		expect(postTitles.length).toBe(6);
+		// Should have exactly 10 posts total (1 + 2 + 7 auto-calculated from default 10 posts per page)
+		expect(postTitles.length).toBe(10);
 
 		// Verify no duplicate posts
 		const uniqueTitles = [...new Set(postTitles)];
 		console.log('Unique posts:', uniqueTitles.length);
-		expect(uniqueTitles.length).toBe(6);
+		expect(uniqueTitles.length).toBe(10);
 	});
 });
