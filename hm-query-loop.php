@@ -118,6 +118,14 @@ $displayed_post_ids = [];
 $query_loop_used_posts = [];
 
 /**
+ * Track post template per page settings within each query loop.
+ * Keyed by query ID, stores array of per page values in order.
+ *
+ * @var array
+ */
+$query_loop_post_template_per_pages = [];
+
+/**
  * Get displayed post IDs.
  *
  * @return array
@@ -237,11 +245,38 @@ function render_block( $block_content, $block ) {
  */
 function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 	if ( $block->name === 'core/post-template' ) {
+		global $query_loop_post_template_per_pages;
+
 		$attrs = $block->parsed_block['attrs'];
-		if ( empty( $attrs['hmQueryLoop']['perPage'] ) ) {
-			return $query;
+		$query_id = $block->context['queryId'] ?? 0;
+
+		// Initialize tracking array for this query loop if not exists
+		if ( ! isset( $query_loop_post_template_per_pages[ $query_id ] ) ) {
+			$query_loop_post_template_per_pages[ $query_id ] = [];
 		}
-		$attrs['hmQueryLoop']['excludeDisplayedForCurrentLoop'] = $block->context['queryId'];
+
+		// Get the query loop's total posts per page
+		$query_per_page = $query['posts_per_page'] ?? get_option( 'posts_per_page', 10 );
+
+		// Calculate total posts used by preceding post templates
+		$used_posts = array_sum( $query_loop_post_template_per_pages[ $query_id ] );
+
+		// Get this post template's per page setting
+		$post_template_per_page = $attrs['hmQueryLoop']['perPage'] ?? null;
+
+		// If no explicit perPage is set, calculate remaining posts
+		if ( empty( $post_template_per_page ) ) {
+			$remaining_posts = max( 1, $query_per_page - $used_posts );
+			$post_template_per_page = $remaining_posts;
+
+			// Set it in attrs so it gets tracked
+			$attrs['hmQueryLoop']['perPage'] = $remaining_posts;
+		}
+
+		// Track this post template's per page value
+		$query_loop_post_template_per_pages[ $query_id ][] = $post_template_per_page;
+
+		$attrs['hmQueryLoop']['excludeDisplayedForCurrentLoop'] = $query_id;
 		return modify_query_from_block_attrs( $query, $attrs );
 	}
 	return modify_query_from_block_attrs( $query, $block->context );
