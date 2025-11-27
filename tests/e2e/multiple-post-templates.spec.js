@@ -116,4 +116,83 @@ test.describe('Multiple Post Templates', () => {
 		console.log('Unique posts:', uniqueTitles.length);
 		expect(uniqueTitles.length).toBe(6);
 	});
+
+	test('should automatically limit third post template to remaining posts', async ({ page, admin, editor, selectBlock }) => {
+		// Create a new page
+		await admin.createNewPost({ postType: 'page' });
+		await page.waitForTimeout(1500);
+		await page.getByRole('button', { name: 'Close' }).click();
+		await editor.openDocumentSettingsSidebar();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).click();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).fill('test automatic limit');
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Add default block' }).click();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('document', { name: 'Empty block; start writing or' }).fill('/query');
+		await page.getByRole('option', { name: 'Query Loop' }).click();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Start blank' }).click();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Image, Date, & Title' }).click();
+
+		// Select the query loop block and set its posts per page to 6
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().locator('.components-placeholder__illustration').first().click();
+		await page.getByRole('button', { name: 'Select parent block: Query' }).click();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		await page.getByRole('spinbutton', { name: 'Items' }).click();
+		await page.getByRole('spinbutton', { name: 'Items' }).fill('6');
+
+		// Configure first post template: 1 post
+		await selectBlock.byName('core/post-template', 0);
+		await page.getByRole('button', { name: 'Post Template Settings' }).click();
+		await page.getByRole('spinbutton', { name: 'Posts per template' }).click();
+		await page.getByRole('spinbutton', { name: 'Posts per template' }).fill('1');
+
+		// Duplicate to create second post template
+		await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
+		await page.getByRole('menuitem', { name: /^Duplicate / }).click();
+
+		// Configure second post template: 2 posts
+		await page.getByRole('button', { name: 'Grid view' }).click();
+		await page.getByRole('button', { name: 'Post Template Settings' }).click();
+		await page.getByRole('spinbutton', { name: 'Posts per template' }).click();
+		await page.getByRole('spinbutton', { name: 'Posts per template' }).press('Shift+ArrowLeft');
+		await page.getByRole('spinbutton', { name: 'Posts per template' }).fill('2');
+		await page.getByRole('spinbutton', { name: 'Columns' }).click();
+		await page.getByRole('spinbutton', { name: 'Columns' }).press('Shift+ArrowLeft');
+		await page.getByRole('spinbutton', { name: 'Columns' }).fill('2');
+
+		// Duplicate to create third post template
+		await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
+		await page.getByRole('menuitem', { name: /^Duplicate / }).click();
+
+		// Configure third post template: leave Posts per template EMPTY (should auto-calculate to 3)
+		await page.getByRole('spinbutton', { name: 'Columns' }).click();
+		await page.getByRole('spinbutton', { name: 'Columns' }).press('Shift+ArrowLeft');
+		await page.getByRole('spinbutton', { name: 'Columns' }).fill('3');
+		await page.getByRole('button', { name: 'Post Template Settings' }).click();
+
+		// Clear the Posts per template field if it has a value
+		const postsPerTemplateInput = page.getByRole('spinbutton', { name: 'Posts per template' });
+		const currentValue = await postsPerTemplateInput.inputValue();
+		if (currentValue) {
+			await postsPerTemplateInput.click();
+			await postsPerTemplateInput.press('Shift+ArrowLeft');
+			await postsPerTemplateInput.press('Backspace');
+		}
+
+		// Publish and view the page
+		await page.getByRole('button', { name: 'Publish', exact: true }).click();
+		await page.getByLabel('Editor publish').getByRole('button', { name: 'Publish', exact: true }).click();
+		await page.getByLabel('Editor publish').getByRole('link', { name: 'View Page' }).click();
+
+		// Get all the post titles on the page
+		const postTitles = await page.locator('.wp-block-post-template .wp-block-post-title').allTextContents();
+		console.log('Post titles found:', postTitles);
+		console.log('Total posts:', postTitles.length);
+
+		// Should have exactly 6 posts total (1 + 2 + 3 auto-calculated)
+		expect(postTitles.length).toBe(6);
+
+		// Verify no duplicate posts
+		const uniqueTitles = [...new Set(postTitles)];
+		console.log('Unique posts:', uniqueTitles.length);
+		expect(uniqueTitles.length).toBe(6);
+	});
 });
