@@ -220,7 +220,7 @@ addFilter(
  */
 const withPostTemplateInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, attributes, setAttributes, context } = props;
+		const { name, attributes, setAttributes, context, clientId } = props;
 
 		if ( name !== 'core/post-template' ) {
 			return <BlockEdit { ...props } />;
@@ -235,6 +235,22 @@ const withPostTemplateInspectorControls = createHigherOrderComponent( ( BlockEdi
 
 		// Get the max per page from query block's perPage or site default
 		const queryPerPage = context?.query?.perPage || window.hmQueryLoopSettings?.postsPerPage || 10;
+
+		// Get the list of child post templates for the current query loop
+		const { postTemplates } = useContext( UsedPostsContext );
+
+		// Calculate the total posts used by preceding post templates
+		let usedPosts = 0;
+		for ( const postTemplate of postTemplates ) {
+			if ( postTemplate.clientId === clientId ) {
+				// Stop when we reach the current post template
+				break;
+			}
+			usedPosts += postTemplate.attributes?.hmQueryLoop?.perPage || 0;
+		}
+
+		// Calculate remaining posts available for this post template
+		const remainingPosts = Math.max( 1, queryPerPage - usedPosts );
 
 		return (
 			<>
@@ -267,7 +283,7 @@ const withPostTemplateInspectorControls = createHigherOrderComponent( ( BlockEdi
 									} );
 								} }
 								min={ 1 }
-								max={ queryPerPage }
+								max={ remainingPosts }
 							/>
 						</PanelBody>
 					</InspectorControls>
