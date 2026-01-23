@@ -201,8 +201,34 @@ function pre_render_block( $pre_render, $parsed_block ) {
 
 	// Run the main query again to trigger the pre_get_posts hook if we're inheriting.
 	global $wp_query;
-	$query_args = modify_query_from_block_attrs( $wp_query->query, $attrs );
+
+	// On the blog posts page, $wp_query->query contains page-related args
+	// (e.g., ['pagename' => 'blog']) instead of posts query args.
+	// WordPress Core converts this to a posts query, but that transformation
+	// is lost when we re-run the query. Use explicit post query args instead.
+	if ( is_home() && ! is_front_page() ) {
+		$query_args = [
+			'post_type' => 'post',
+			'paged'     => $original_paged,
+		];
+	} else {
+		$query_args = $wp_query->query;
+	}
+
+	$query_args = modify_query_from_block_attrs( $query_args, $attrs );
+
 	$wp_query->query( $query_args );
+
+	// ElasticPress and similar plugins use posts_pre_query to return cached results,
+	// ignoring our posts_per_page setting. Manually slice the posts array to enforce the limit.
+	$settings = $attrs['hmQueryLoop'] ?? [];
+	if ( isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
+		$per_page = (int) $settings['perPage'];
+		if ( count( $wp_query->posts ) > $per_page ) {
+			$wp_query->posts      = array_slice( $wp_query->posts, 0, $per_page );
+			$wp_query->post_count = count( $wp_query->posts );
+		}
+	}
 
 	// The global query can happen again in some cases, so avoid double collecting,
 	// especially with AQL or similar plugins to this one.
