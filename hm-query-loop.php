@@ -309,6 +309,37 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 }
 
 /**
+ * Exclude posts from a query by handling both post__not_in and post__in parameters.
+ *
+ * When post__in is set, WordPress ignores post__not_in. This function ensures
+ * exclusions work correctly by filtering post__in directly when present.
+ *
+ * @param array $query        The query args array.
+ * @param array $excluded_ids Post IDs to exclude.
+ * @return array Modified query args.
+ */
+function exclude_posts_from_query( $query, $excluded_ids ) {
+	if ( empty( $excluded_ids ) ) {
+		return $query;
+	}
+
+	// If post__in is set, filter out excluded IDs from it.
+	// This is necessary because post__in takes precedence over post__not_in in WordPress.
+	if ( ! empty( $query['post__in'] ) && is_array( $query['post__in'] ) ) {
+		$query['post__in'] = array_values( array_diff( $query['post__in'], $excluded_ids ) );
+	}
+
+	// Also set post__not_in for queries without post__in.
+	$existing_exclusions = $query['post__not_in'] ?? [];
+	if ( ! is_array( $existing_exclusions ) ) {
+		$existing_exclusions = [];
+	}
+	$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $excluded_ids ) );
+
+	return $query;
+}
+
+/**
  * Modify query using pre_get_posts based on block attributes.
  * This is hooked/unhooked dynamically around Query Loop block rendering.
  *
@@ -341,11 +372,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	if ( isset( $settings['excludeDisplayed'] ) && $settings['excludeDisplayed'] ) {
 		$displayed_ids = get_displayed_post_ids();
 		if ( ! empty( $displayed_ids ) ) {
-			$existing_exclusions = $query['post__not_in'] ?? [];
-			if ( ! is_array( $existing_exclusions ) ) {
-				$existing_exclusions = [];
-			}
-			$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $displayed_ids ) );
+			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
 
@@ -354,11 +381,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 		$query['query_id'] = $settings['excludeDisplayedForCurrentLoop'];
 		$displayed_ids = get_query_loop_used_posts( $settings['excludeDisplayedForCurrentLoop'] );
 		if ( ! empty( $displayed_ids ) ) {
-			$existing_exclusions = $query['post__not_in'] ?? [];
-			if ( ! is_array( $existing_exclusions ) ) {
-				$existing_exclusions = [];
-			}
-			$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $displayed_ids ) );
+			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
 
