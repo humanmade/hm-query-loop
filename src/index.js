@@ -5,7 +5,12 @@ import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
+import {
+	PanelBody,
+	ToggleControl,
+	TextControl,
+	SelectControl,
+} from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import { createContext, useContext } from '@wordpress/element';
 
@@ -103,6 +108,19 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		const isInheritQuery = query.inherit || false;
 		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
 
+		// Get available presets from PHP.
+		const availablePresets = window.hmQueryLoopPresets?.presets || [];
+		const selectedPreset = query.hmPreset || '';
+
+		// Build preset options for the dropdown.
+		const presetOptions = [
+			{ label: __( '— None —', 'hm-query-loop' ), value: '' },
+			...availablePresets.map( ( preset ) => ( {
+				label: preset.label,
+				value: preset.name,
+			} ) ),
+		];
+
 		return (
 			<>
 				<BlockEdit { ...props } />
@@ -114,6 +132,25 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 						) }
 						initialOpen={ false }
 					>
+						{ availablePresets.length > 0 && (
+							<SelectControl
+								label={ __( 'Query Preset', 'hm-query-loop' ) }
+								help={ __(
+									'Apply a predefined query configuration.',
+									'hm-query-loop'
+								) }
+								value={ selectedPreset }
+								options={ presetOptions }
+								onChange={ ( value ) =>
+									setAttributes( {
+										query: {
+											...query,
+											hmPreset: value || undefined,
+										},
+									} )
+								}
+							/>
+						) }
 						{ isInheritQuery && (
 							<TextControl
 								label={ __(
