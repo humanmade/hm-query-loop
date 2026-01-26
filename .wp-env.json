@@ -4,10 +4,7 @@
 		".",
 		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
 	],
-	"themes": [
-		"WordPress/twentytwentyfour",
-		"WordPress/twentytwentyfive"
-	],
+	"themes": [ "WordPress/twentytwentyfour", "WordPress/twentytwentyfive" ],
 	"port": 8888,
 	"testsPort": 8889,
 	"config": {
