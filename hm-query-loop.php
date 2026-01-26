@@ -32,11 +32,11 @@ function init() {
 	add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\enqueue_block_editor_assets', 9 );
 
 	// Register block filters.
-	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 10, 3 );
-	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 10, 2 );
+	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 11, 3 );
+	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 11, 2 );
 
 	// Hook query_loop_block_query_vars to modify the query.
-	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 10, 2 );
+	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 2 );
 
 	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
