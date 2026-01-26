@@ -35,6 +35,10 @@ test.describe("Exclude Displayed Posts with post__in", () => {
       .getByRole("textbox", { name: "Add title" })
       .fill("Test post__in exclusion");
 
+    // Open sidebar settings
+    await editor.openDocumentSettingsSidebar();
+    await page.waitForTimeout(500);
+
     // First, we need to get some post IDs to use for post__in
     // Insert the first Query Loop block using Advanced Query Loop
     await page
@@ -46,7 +50,7 @@ test.describe("Exclude Displayed Posts with post__in", () => {
       .locator('iframe[name="editor-canvas"]')
       .contentFrame()
       .getByRole("document", { name: "Empty block; start writing or" })
-      .fill("/advanced query loop");
+      .fill("/advanced");
     await page.getByRole("option", { name: "Advanced Query Loop" }).click();
 
     // Wait for block to be inserted
@@ -60,78 +64,39 @@ test.describe("Exclude Displayed Posts with post__in", () => {
         .locator(".wp-block-query"),
     ).toBeVisible({ timeout: 5000 });
 
-    // Open sidebar settings
-    await editor.openDocumentSettingsSidebar();
-    await page.waitForTimeout(500);
+		// Select a default pattern
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByLabel('Block: Advanced Query Loop').getByRole('button', { name: 'Start blank' }).click();
+		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Title & Date' }).click();
 
-    // Look for the "Include" panel in Advanced Query Loop settings and expand it
-    const includePanel = page.locator(
-      '.components-panel__body-title:has-text("Include")',
-    );
-    const includeVisible = await includePanel
-      .isVisible({ timeout: 2000 })
-      .catch(() => false);
-
-    if (includeVisible) {
-      const isExpanded = await includePanel
-        .locator("button")
-        .getAttribute("aria-expanded");
-      if (isExpanded !== "true") {
-        await includePanel.locator("button").click();
-        await page.waitForTimeout(500);
-      }
-    }
-
-    // Use the "Individual posts" control to select specific posts
-    // This sets the post__in parameter
-    const postPickerToggle = page
-      .locator('label:has-text("Individual posts")')
-      .locator("..")
-      .locator('input[type="checkbox"]');
-    if (
-      await postPickerToggle.isVisible({ timeout: 2000 }).catch(() => false)
-    ) {
-      const isChecked = await postPickerToggle.isChecked();
-      if (!isChecked) {
-        await postPickerToggle.click();
-        await page.waitForTimeout(500);
-      }
-    }
-
-    // Use the search box to find posts and add them
-    const searchInput = page.getByPlaceholder("Search for content");
-    if (await searchInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await searchInput.fill("");
-      await page.waitForTimeout(500);
-
-      // Select first 3 posts from the results
-      const searchResults = page.locator(
-        ".block-editor-link-control__search-results button",
-      );
-      const resultsCount = await searchResults.count();
-      console.log(`Found ${resultsCount} search results`);
-
-      for (let i = 0; i < Math.min(3, resultsCount); i++) {
-        await searchResults.nth(i).click();
-        await page.waitForTimeout(300);
-      }
-    }
+		// Set the posts to include
+		await page.getByRole('combobox', { name: 'Posts', exact: true }).click();
+		await page.getByRole('option', { name: 'Post 23' }).click();
+		await page.getByRole('option', { name: 'Post 21' }).click();
 
     // Get post titles from first query
     const canvas = page.locator('iframe[name="editor-canvas"]').contentFrame();
     await page.waitForTimeout(1000);
 
-    // Add a second Query Loop block after the first
-    await canvas.locator(".wp-block-query").first().click();
-    await page.waitForTimeout(500);
+		// Select the second query loop block
+    const queryBlock = await page.evaluate(() => {
+      return window.wp.data
+        .select("core/block-editor")
+        .getBlocksByName("core/query");
+    });
 
-    // Use keyboard to move after the block and insert a new one
-    await page.keyboard.press("Enter");
-    await page.waitForTimeout(300);
+		await page.evaluate((clientId) => {
+			window.wp.data.dispatch("core/block-editor").selectBlock(clientId);
+		}, queryBlock[0]);
+		await page.waitForTimeout(500);
+
+    // Add a second Query Loop block after the first
+  	await page.getByRole('toolbar', { name: 'Block tools' }).getByLabel('Options').click();
+  	await page.getByRole('menuitem', { name: 'Add after ⌥⌘Y' }).click();
 
     // Insert second query loop (regular one, not AQL)
     await canvas
       .getByRole("document", { name: "Empty block; start writing or" })
+			.last()
       .fill("/query");
     await page.getByRole("option", { name: "Query Loop" }).first().click();
     await page.waitForTimeout(1000);
@@ -160,7 +125,6 @@ test.describe("Exclude Displayed Posts with post__in", () => {
         .select("core/block-editor")
         .getBlocksByName("core/query");
     });
-    console.log(`Found ${queryBlocks.length} query blocks`);
 
     if (queryBlocks.length >= 2) {
       await page.evaluate((clientId) => {
@@ -191,7 +155,7 @@ test.describe("Exclude Displayed Posts with post__in", () => {
 
     // Enable "Exclude Displayed Posts"
     const excludeDisplayedToggle = page
-      .locator('label:has-text("Exclude Displayed Posts")')
+      .locator('label:has-text("Exclude already displayed Posts")')
       .locator("..")
       .locator('input[type="checkbox"]');
     if (
@@ -278,22 +242,9 @@ test.describe("Exclude Displayed Posts with post__in", () => {
       .locator('iframe[name="editor-canvas"]')
       .contentFrame()
       .getByRole("document", { name: "Empty block; start writing or" })
-      .fill("/advanced query loop");
+      .fill("/query");
 
-    const aqlOption = page.getByRole("option", { name: "Advanced Query Loop" });
-    if (await aqlOption.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await aqlOption.click();
-    } else {
-      // Fall back to regular query loop if AQL not available
-      await page
-        .locator('iframe[name="editor-canvas"]')
-        .contentFrame()
-        .getByRole("document", { name: "Empty block; start writing or" })
-        .fill("/query");
-      await page.getByRole("option", { name: "Query Loop" }).first().click();
-    }
-
-    await page.waitForTimeout(1000);
+    await page.getByRole("option", { name: "Advanced Query Loop" }).click();
 
     const canvas = page.locator('iframe[name="editor-canvas"]').contentFrame();
 
@@ -316,6 +267,15 @@ test.describe("Exclude Displayed Posts with post__in", () => {
       await patternButton.click();
       await page.waitForTimeout(500);
     }
+
+		// Set the posts to include
+		await page.getByRole('combobox', { name: 'Posts', exact: true }).click();
+		await page.getByRole('option', { name: 'Post 23' }).click();
+		await page.getByRole('option', { name: 'Post 21' }).click();
+		await page.getByRole('option', { name: 'Post 19' }).click();
+		await page.getByRole('option', { name: 'Post 18' }).click();
+		await page.getByRole('option', { name: 'Post 16' }).click();
+		await page.getByRole('option', { name: 'Post 24' }).click();
 
     // Select the first post template and configure it
     await canvas

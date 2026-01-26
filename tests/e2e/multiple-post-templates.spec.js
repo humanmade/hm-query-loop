@@ -72,7 +72,7 @@ test.describe('Multiple Post Templates', () => {
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).fill('test');
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Add default block' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('document', { name: 'Empty block; start writing or' }).fill('/query');
-		await page.getByRole('option', { name: 'Query Loop' }).click();
+		await page.getByRole('option', { name: /^Query Loop/ }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Start blank' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Image, Date, & Title' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().locator('.components-placeholder__illustration').first().click();
@@ -127,7 +127,7 @@ test.describe('Multiple Post Templates', () => {
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('textbox', { name: 'Add title' }).fill('test automatic limit');
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Add default block' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('document', { name: 'Empty block; start writing or' }).fill('/query');
-		await page.getByRole('option', { name: 'Query Loop' }).click();
+		await page.getByRole('option', { name: /^Query Loop/ }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Start blank' }).click();
 		await page.locator('iframe[name="editor-canvas"]').contentFrame().getByRole('button', { name: 'Image, Date, & Title' }).click();
 

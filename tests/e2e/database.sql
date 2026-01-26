@@ -1,4 +1,4 @@
-/*M!999999\- enable the sandbox mode */ 
+/*M!999999\- enable the sandbox mode */
 -- MariaDB dump 10.19-11.4.8-MariaDB, for Linux (aarch64)
 --
 -- Host: tests-mysql    Database: tests-wordpress
@@ -177,7 +177,7 @@ INSERT INTO `wp_options` VALUES
 (31,'hack_file','0','on'),
 (32,'blog_charset','UTF-8','on'),
 (33,'moderation_keys','','off'),
-(34,'active_plugins','a:1:{i:0;s:31:\"hm-query-loop/hm-query-loop.php\";}','on'),
+(34,'active_plugins','a:2:{i:0;s:31:\"hm-query-loop/hm-query-loop.php\";i:1;s:29:\"advanced-query-loop/index.php\";}','on'),
 (35,'category_base','','on'),
 (36,'ping_sites','http://rpc.pingomatic.com/','on'),
 (37,'comment_max_links','2','on'),

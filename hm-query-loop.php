@@ -45,7 +45,7 @@ function init() {
 	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_block_metadata' );
 }
 
-add_action( 'init', __NAMESPACE__ . '\\init' );
+add_action( 'init', __NAMESPACE__ . '\\init', 9 );
 
 /**
  * Enqueue block editor assets.
@@ -88,14 +88,14 @@ function filter_block_metadata( $metadata ) {
 	if ( $metadata['name'] === 'core/query' ) {
 		$metadata['providesContext'] = array_merge(
 			$metadata['providesContext'] ?? [],
-			[ 'hm-query-loop/settings' ]
+			[ 'hmQueryLoop' => 'hmQueryLoop' ]
 		);
 	}
 
 	if ( $metadata['name'] === 'core/post-template' ) {
 		$metadata['usesContext'] = array_merge(
 			$metadata['usesContext'] ?? [],
-			[ 'hm-query-loop/settings' ]
+			[ 'hmQueryLoop' ]
 		);
 	}
 
@@ -273,7 +273,12 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 	if ( $block->name === 'core/post-template' ) {
 		global $query_loop_post_template_per_pages;
 
+		// Merge hmQueryLoop context with post template block attribute.
 		$attrs = $block->parsed_block['attrs'];
+		$attrs['hmQueryLoop'] = wp_parse_args(
+			$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
+			$block->context['hmQueryLoop'] ?? [],
+		);
 		$query_id = $block->context['queryId'] ?? 0;
 
 		// Initialize tracking array for this query loop if not exists

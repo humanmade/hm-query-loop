@@ -44,7 +44,7 @@ function addQueryLoopAttributes( settings, name ) {
 		},
 		providesContext: {
 			...( settings.providesContext || {} ),
-			'hm-query-loop/settings': 'hmQueryLoop',
+			'hmQueryLoop': 'hmQueryLoop',
 		},
 	};
 }
@@ -78,7 +78,7 @@ function addPostTemplateContext( settings, name ) {
 		},
 		usesContext: [
 			...( settings.usesContext || [] ),
-			'hm-query-loop/settings',
+			'hmQueryLoop',
 		],
 	};
 }
@@ -347,7 +347,7 @@ const withPostTemplateStyles = createHigherOrderComponent( ( BlockEdit ) => {
 		}
 
 		// Get the hmQueryLoop settings from context (query block level)
-		const hmQueryLoopSettings = context?.[ 'hm-query-loop/settings' ] || {};
+		const hmQueryLoopSettings = context?.[ 'hmQueryLoop' ] || {};
 		const queryLevelPerPage = hmQueryLoopSettings.perPage;
 
 		// Get the hmPostTemplate settings from attributes (post-template block level)

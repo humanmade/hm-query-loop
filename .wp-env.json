@@ -1,5 +1,5 @@
 {
-	"core": "WordPress/WordPress#6.7.1",
+	"core": "WordPress/WordPress#6.9.0",
 	"plugins": [
 		".",
 		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
@@ -13,13 +13,5 @@
 	"config": {
 		"WP_DEBUG": true,
 		"SCRIPT_DEBUG": true
-	},
-	"env": {
-		"tests": {
-			"themes": [
-				"WordPress/twentytwentyfour",
-				"WordPress/twentytwentyfive"
-			]
-		}
 	}
 }

@@ -27,8 +27,8 @@ module.exports = async (config) => {
 	// Wait for either admin dashboard or admin bar (more flexible)
 	try {
 		await Promise.race([
-			page.waitForURL('**/wp-admin/**', { timeout: 10000 }),
-			page.waitForSelector('#wpadminbar', { timeout: 10000 }),
+			page.waitForURL('**/wp-admin/**', { timeout: 20000 }),
+			page.waitForSelector('#wpadminbar', { timeout: 20000 }),
 		]);
 	} catch (error) {
 		console.error('Failed to log in to WordPress');
