@@ -103,22 +103,6 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		const isInheritQuery = query.inherit || false;
 		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
 
-		// Sync the perPage setting with the query perPage for non-inherited queries
-		// For inherited queries, sync it as well to show the override in the editor
-		useEffect( () => {
-			if ( perPage !== undefined && perPage > 0 ) {
-				// Try to update the query.perPage to reflect in the editor
-				if ( query.perPage !== perPage ) {
-					setAttributes( {
-						query: {
-							...query,
-							perPage,
-						},
-					} );
-				}
-			}
-		}, [ perPage, query, setAttributes ] );
-
 		return (
 			<>
 				<BlockEdit { ...props } />

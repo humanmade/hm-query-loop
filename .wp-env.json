@@ -1,5 +1,5 @@
 {
-	"core": "WordPress/WordPress#6.9.0",
+	"core": "WordPress/WordPress#6.9",
 	"plugins": [
 		".",
 		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
