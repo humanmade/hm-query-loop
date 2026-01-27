@@ -7,7 +7,9 @@
  * Uses CSS custom property --hm-query-loop-per-page to determine the limit
  */
 .wp-block-post-template {
+
 	&[style*="--hm-query-loop-per-page"] {
+
 		/* Hide all list items by default */
 		> li {
 			display: none;
