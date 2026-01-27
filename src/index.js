@@ -7,7 +7,7 @@ import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
 import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { useEffect, createContext, useContext } from '@wordpress/element';
+import { createContext, useContext } from '@wordpress/element';
 
 /**
  * Styles

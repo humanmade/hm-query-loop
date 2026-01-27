@@ -39,6 +39,7 @@ module.exports = async () => {
 
 	// Set user preferences for the editor to avoid unwanted modals.
 	await page.evaluate( () =>
+		// eslint-disable-next-line no-undef
 		localStorage.setItem(
 			'WP_PREFERENCES_USER_1',
 			'{"core":{"isComplementaryAreaVisible":true,"enableChoosePatternModal":false},"core/edit-post":{"welcomeGuide":false,"fullscreenMode":false}}'
