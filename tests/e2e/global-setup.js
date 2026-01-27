@@ -28,14 +28,22 @@ module.exports = async () => {
 	// Wait for either admin dashboard or admin bar (more flexible)
 	try {
 		await Promise.race( [
-			page.waitForURL( '**/wp-admin/**', { timeout: 20000 } ),
-			page.waitForSelector( '#wpadminbar', { timeout: 20000 } ),
+			page.waitForURL( '**/wp-admin/', { timeout: 15000 } ),
+			page.waitForSelector( '#wpadminbar', { timeout: 15000 } ),
 		] );
 	} catch ( error ) {
 		console.error( 'Failed to log in to WordPress' );
 		await browser.close();
 		throw error;
 	}
+
+	// Set user preferences for the editor to avoid unwanted modals.
+	await page.evaluate( () =>
+		localStorage.setItem(
+			'WP_PREFERENCES_USER_1',
+			'{"core":{"isComplementaryAreaVisible":true,"enableChoosePatternModal":false},"core/edit-post":{"welcomeGuide":false,"fullscreenMode":false}}'
+		)
+	);
 
 	// Save the authentication state
 	await page.context().storageState( { path: '.auth/wordpress.json' } );

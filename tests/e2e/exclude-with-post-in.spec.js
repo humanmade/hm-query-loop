@@ -13,6 +13,7 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 		page,
 		admin,
 		editor,
+		blockEditor,
 	} ) => {
 		// Create a new page
 		await admin.createNewPost( { postType: 'page' } );
@@ -84,6 +85,9 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.getByRole( 'button', { name: 'Title & Date' } )
 			.click();
 
+		// Check if we need to set this to a custom loop, WP 6.9 does not default to custom.
+		await blockEditor.queryBlock.setAsCustom();
+
 		// Set the posts to include
 		await page
 			.getByRole( 'combobox', { name: 'Posts', exact: true } )
@@ -97,19 +101,8 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.contentFrame();
 		await page.waitForTimeout( 1000 );
 
-		// Select the second query loop block
-		const queryBlock = await page.evaluate( () => {
-			return window.wp.data
-				.select( 'core/block-editor' )
-				.getBlocksByName( 'core/query' );
-		} );
-
-		await page.evaluate( ( clientId ) => {
-			window.wp.data
-				.dispatch( 'core/block-editor' )
-				.selectBlock( clientId );
-		}, queryBlock[ 0 ] );
-		await page.waitForTimeout( 500 );
+		// Select the first query loop block
+		await blockEditor.selectBlock.byName( 'core/query', 0 );
 
 		// Add a second Query Loop block after the first
 		await page
@@ -155,84 +148,31 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			await page.waitForTimeout( 500 );
 		}
 
-		// Select the second query loop block
-		const queryBlocks = await page.evaluate( () => {
-			return window.wp.data
-				.select( 'core/block-editor' )
-				.getBlocksByName( 'core/query' );
-		} );
+		await blockEditor.queryBlock.setAsCustom();
 
-		if ( queryBlocks.length >= 2 ) {
-			await page.evaluate( ( clientId ) => {
-				window.wp.data
-					.dispatch( 'core/block-editor' )
-					.selectBlock( clientId );
-			}, queryBlocks[ 1 ] );
-			await page.waitForTimeout( 500 );
-		}
+		// Select the second query loop block
+		await blockEditor.selectBlock.byName( 'core/query', 1 );
 
 		// Open settings for the second query loop
 		await editor.openDocumentSettingsSidebar();
 		await page.waitForTimeout( 500 );
 
 		// Expand Extra Query Loop Settings panel
-		const extraSettingsPanel = page.locator(
-			'.components-panel__body-title:has-text("Extra Query Loop Settings")'
-		);
-		if (
-			await extraSettingsPanel
-				.isVisible( { timeout: 2000 } )
-				.catch( () => false )
-		) {
-			const isExpanded = await extraSettingsPanel
-				.locator( 'button' )
-				.getAttribute( 'aria-expanded' );
-			if ( isExpanded !== 'true' ) {
-				await extraSettingsPanel.locator( 'button' ).click();
-				await page.waitForTimeout( 300 );
-			}
-		}
+		await blockEditor.queryBlock.openSettingsPanel();
 
 		// Enable "Exclude Displayed Posts"
-		const excludeDisplayedToggle = page
-			.locator( 'label:has-text("Exclude already displayed Posts")' )
-			.locator( '..' )
-			.locator( 'input[type="checkbox"]' );
-		if (
-			await excludeDisplayedToggle
-				.isVisible( { timeout: 2000 } )
-				.catch( () => false )
-		) {
-			const isChecked = await excludeDisplayedToggle.isChecked();
-			if ( ! isChecked ) {
-				await excludeDisplayedToggle.click();
-				await page.waitForTimeout( 500 );
-			}
-		}
+		await blockEditor.queryBlock.excludeDisplayed();
 
 		// Publish the page
-		await page
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page.waitForTimeout( 500 );
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page.waitForTimeout( 1000 );
-
-		// View the published page
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'link', { name: 'View Page' } )
-			.click();
-		await page.waitForTimeout( 1000 );
+		await blockEditor.publishAndVisit();
 
 		// Get all post titles from both query loops
+		console.log( await page.content() );
 		const allPostTitles = await page
 			.locator( '.wp-block-post-template .wp-block-post-title' )
 			.allTextContents();
 		console.log( 'All post titles on page:', allPostTitles );
+		expect( allPostTitles.length ).toBe( 12 );
 
 		// Verify no duplicates exist
 		const uniqueTitles = [ ...new Set( allPostTitles ) ];
@@ -247,6 +187,8 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 	test( 'should properly filter post__in array when multiple post templates used', async ( {
 		page,
 		admin,
+		editor,
+		blockEditor,
 	} ) => {
 		// This test verifies the fix works for the excludeDisplayedForCurrentLoop feature
 		// when post__in is set via Advanced Query Loop
@@ -323,6 +265,9 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			await page.waitForTimeout( 500 );
 		}
 
+		await editor.openDocumentSettingsSidebar();
+		await blockEditor.queryBlock.setAsCustom();
+
 		// Set the posts to include
 		await page
 			.getByRole( 'combobox', { name: 'Posts', exact: true } )
@@ -335,13 +280,7 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 		await page.getByRole( 'option', { name: 'Post 24' } ).click();
 
 		// Select the first post template and configure it
-		await canvas
-			.locator( '.components-placeholder__illustration' )
-			.first()
-			.click();
-		await page
-			.getByRole( 'button', { name: 'Select parent block: Post' } )
-			.click();
+		await blockEditor.selectBlock.byName( 'core/post-template' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();
@@ -375,21 +314,8 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.getByRole( 'spinbutton', { name: 'Posts per template' } )
 			.fill( '3' );
 
-		// Publish and view
-		await page
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page.waitForTimeout( 500 );
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page.waitForTimeout( 1000 );
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'link', { name: 'View Page' } )
-			.click();
-		await page.waitForTimeout( 1000 );
+		// Publish the page
+		await blockEditor.publishAndVisit();
 
 		// Get all post titles
 		const allPostTitles = await page

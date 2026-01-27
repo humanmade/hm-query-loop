@@ -58,7 +58,9 @@ function enqueue_block_editor_assets() {
 		HM_QUERY_LOOP_URL . 'build/index.js',
 		$asset_file['dependencies'],
 		$asset_file['version'],
-		true
+		[
+			'in_footer' => false,
+		]
 	);
 
 	// Pass the posts_per_page setting to JavaScript

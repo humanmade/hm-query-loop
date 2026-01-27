@@ -18,10 +18,10 @@ test.describe( 'Posts Per Page Override', () => {
 
 	test( 'should be able to open the index template in site editor', async ( {
 		page,
-		siteEditor,
+		blockEditor,
 	} ) => {
 		// Open the index template
-		await siteEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
+		await blockEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
 
 		// Check that the site editor loaded
 		const siteEditorLoaded = await page
@@ -30,22 +30,22 @@ test.describe( 'Posts Per Page Override', () => {
 		expect( siteEditorLoaded ).toBe( true );
 
 		// Check that the canvas iframe is present
-		const canvas = siteEditor.canvas;
+		const canvas = blockEditor.canvas;
 		expect( canvas ).toBeTruthy();
 	} );
 
 	test( 'should show posts per page control when query inherits', async ( {
 		page,
-		siteEditor,
+		blockEditor,
 	} ) => {
 		// Open the index template
-		await siteEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
+		await blockEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
 
 		// Select the query loop block
-		await siteEditor.selectBlockByName( 'core/query' );
+		await blockEditor.selectBlock.byName( 'core/query' );
 
 		// Open the settings sidebar
-		await siteEditor.openSettingsSidebar();
+		await blockEditor.openSettingsSidebar();
 
 		// Debug: Log all panel body titles to see what's available
 		const panelBodies = await page
@@ -60,7 +60,7 @@ test.describe( 'Posts Per Page Override', () => {
 		await expect( extraSettingsPanel ).toBeVisible( { timeout: 5000 } );
 
 		// Expand the panel
-		await siteEditor.expandPanel( 'Extra Query Loop Settings' );
+		await blockEditor.expandPanel( 'Extra Query Loop Settings' );
 
 		// Check for the Posts per page override control
 		const perPageControl = page.locator(
@@ -71,13 +71,13 @@ test.describe( 'Posts Per Page Override', () => {
 
 	test( 'should reflect posts per page override in editor', async ( {
 		page,
-		siteEditor,
+		blockEditor,
 	} ) => {
 		// Open the index template
-		await siteEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
+		await blockEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
 
 		// Get the canvas
-		const canvas = siteEditor.canvas;
+		const canvas = blockEditor.canvas;
 
 		// Wait for post template block (contains the list of posts)
 		await expect( canvas.locator( '.wp-block-post-template' ) ).toBeVisible(
@@ -91,16 +91,16 @@ test.describe( 'Posts Per Page Override', () => {
 		console.log( `Initial post count: ${ initialPostCount }` );
 
 		// Select the query loop block
-		await siteEditor.selectBlockByName( 'core/query' );
+		await blockEditor.selectBlock.byName( 'core/query' );
 
 		// Open settings sidebar
-		await siteEditor.openSettingsSidebar();
+		await blockEditor.openSettingsSidebar();
 
 		// Expand Extra Query Loop Settings
-		await siteEditor.expandPanel( 'Extra Query Loop Settings' );
+		await blockEditor.expandPanel( 'Extra Query Loop Settings' );
 
 		// Find and fill the Posts per page override control
-		const perPageInput = siteEditor.getPostsPerPageInput();
+		const perPageInput = blockEditor.getPostsPerPageInput();
 		await perPageInput.fill( '3' );
 		await page.waitForTimeout( 1000 ); // Wait for the effect to apply
 
@@ -116,13 +116,13 @@ test.describe( 'Posts Per Page Override', () => {
 
 	test( 'should enforce max value from posts_per_page setting', async ( {
 		page,
-		siteEditor,
+		blockEditor,
 	} ) => {
 		// Open the index template
-		await siteEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
+		await blockEditor.visitSiteEditor( 'index', 'twentytwentyfive' );
 
 		// Get the canvas
-		const canvas = siteEditor.canvas;
+		const canvas = blockEditor.canvas;
 
 		// Wait for query loop block to be visible
 		await expect( canvas.locator( '.wp-block-query' ) ).toBeVisible( {
@@ -130,16 +130,16 @@ test.describe( 'Posts Per Page Override', () => {
 		} );
 
 		// Select the query loop block
-		await siteEditor.selectBlockByName( 'core/query' );
+		await blockEditor.selectBlock.byName( 'core/query' );
 
 		// Open settings sidebar
-		await siteEditor.openSettingsSidebar();
+		await blockEditor.openSettingsSidebar();
 
 		// Expand Extra Query Loop Settings
-		await siteEditor.expandPanel( 'Extra Query Loop Settings' );
+		await blockEditor.expandPanel( 'Extra Query Loop Settings' );
 
 		// Find the Posts per page override input
-		const perPageInput = siteEditor.getPostsPerPageInput();
+		const perPageInput = blockEditor.getPostsPerPageInput();
 
 		// Check that it has a max attribute set to 10 (default posts_per_page)
 		const maxValue = await perPageInput.getAttribute( 'max' );

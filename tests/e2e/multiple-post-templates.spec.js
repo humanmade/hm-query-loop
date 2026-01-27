@@ -9,7 +9,7 @@ test.describe( 'Multiple Post Templates', () => {
 		page,
 		admin,
 		editor,
-		selectBlock,
+		blockEditor,
 	} ) => {
 		// Create a new page
 		await admin.createNewPost( { postType: 'page' } );
@@ -26,44 +26,9 @@ test.describe( 'Multiple Post Templates', () => {
 		);
 
 		// Make sure the query is NOT set to inherit by checking/unchecking inherit toggle
-		await selectBlock.byName( 'core/query', 0 );
+		await blockEditor.selectBlock.byName( 'core/query', 0 );
 		await editor.openDocumentSettingsSidebar();
 		await page.waitForTimeout( 500 );
-
-		// Look for the inherit toggle and make sure it's OFF
-		const inheritToggle = page.locator(
-			'label:has-text("Inherit query from template")'
-		);
-		const isInheritVisible = await inheritToggle
-			.isVisible( { timeout: 2000 } )
-			.catch( () => false );
-
-		if ( isInheritVisible ) {
-			const toggleInput = inheritToggle
-				.locator( '..' )
-				.locator( 'input[type="checkbox"]' );
-			const isChecked = await toggleInput.isChecked();
-
-			if ( isChecked ) {
-				await toggleInput.click();
-				await page.waitForTimeout( 500 );
-			}
-		}
-
-		// Debug: Check what block is actually selected
-		const selectedBlockName = await page.evaluate( () => {
-			const selectedBlockId = window.wp.data
-				.select( 'core/block-editor' )
-				.getSelectedBlockClientId();
-			if ( ! selectedBlockId ) {
-				return 'None';
-			}
-			const block = window.wp.data
-				.select( 'core/block-editor' )
-				.getBlock( selectedBlockId );
-			return block ? block.name : 'Unknown';
-		} );
-		console.log( 'Selected block:', selectedBlockName );
 
 		await page
 			.locator( 'iframe[name="editor-canvas"]' )
@@ -75,15 +40,9 @@ test.describe( 'Multiple Post Templates', () => {
 			.contentFrame()
 			.getByRole( 'button', { name: 'Title & Date' } )
 			.click();
-		await page
-			.locator( 'iframe[name="editor-canvas"]' )
-			.contentFrame()
-			.getByRole( 'listitem' )
-			.getByRole( 'document', { name: 'Block: Title' } )
-			.click();
-		await page
-			.getByRole( 'button', { name: 'Select parent block: Post' } )
-			.click();
+		await blockEditor.queryBlock.setAsCustom();
+
+		await blockEditor.selectBlock.byName( 'core/post-template' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();
@@ -107,6 +66,7 @@ test.describe( 'Multiple Post Templates', () => {
 		page,
 		admin,
 		editor,
+		blockEditor,
 	} ) => {
 		// Create a new page
 		await admin.createNewPost( { postType: 'page' } );
@@ -144,15 +104,9 @@ test.describe( 'Multiple Post Templates', () => {
 			.contentFrame()
 			.getByRole( 'button', { name: 'Image, Date, & Title' } )
 			.click();
-		await page
-			.locator( 'iframe[name="editor-canvas"]' )
-			.contentFrame()
-			.locator( '.components-placeholder__illustration' )
-			.first()
-			.click();
-		await page
-			.getByRole( 'button', { name: 'Select parent block: Post' } )
-			.click();
+		await blockEditor.queryBlock.setAsCustom();
+
+		await blockEditor.selectBlock.byName( 'core/post-template' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();
@@ -207,17 +161,8 @@ test.describe( 'Multiple Post Templates', () => {
 		await page
 			.getByRole( 'spinbutton', { name: 'Posts per template' } )
 			.fill( '3' );
-		await page
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'link', { name: 'View Page' } )
-			.click();
+
+		await blockEditor.publishAndVisit();
 
 		// Get all the post titles on the page
 		const postTitles = await page
@@ -239,6 +184,7 @@ test.describe( 'Multiple Post Templates', () => {
 		page,
 		admin,
 		editor,
+		blockEditor,
 	} ) => {
 		// Create a new page
 		await admin.createNewPost( { postType: 'page' } );
@@ -276,17 +222,10 @@ test.describe( 'Multiple Post Templates', () => {
 			.contentFrame()
 			.getByRole( 'button', { name: 'Image, Date, & Title' } )
 			.click();
+		await blockEditor.queryBlock.setAsCustom();
 
 		// Configure first post template: 1 post
-		await page
-			.locator( 'iframe[name="editor-canvas"]' )
-			.contentFrame()
-			.locator( '.components-placeholder__illustration' )
-			.first()
-			.click();
-		await page
-			.getByRole( 'button', { name: 'Select parent block: Post' } )
-			.click();
+		await blockEditor.selectBlock.byName( 'core/post-template' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();
@@ -353,17 +292,7 @@ test.describe( 'Multiple Post Templates', () => {
 		}
 
 		// Publish and view the page
-		await page
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'button', { name: 'Publish', exact: true } )
-			.click();
-		await page
-			.getByLabel( 'Editor publish' )
-			.getByRole( 'link', { name: 'View Page' } )
-			.click();
+		await blockEditor.publishAndVisit();
 
 		// Get all the post titles on the page
 		const postTitles = await page

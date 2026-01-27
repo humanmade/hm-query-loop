@@ -18,8 +18,8 @@ export const test = base.extend( {
 	 * @param root0.page
 	 * @param use
 	 */
-	siteEditor: async ( { admin, editor, page }, use ) => {
-		const siteEditorUtils = {
+	blockEditor: async ( { admin, editor, page }, use ) => {
+		const blockEditorUtils = {
 			/**
 			 * Navigate to the site editor to edit a template.
 			 * @param templateSlug
@@ -87,28 +87,6 @@ export const test = base.extend( {
 			},
 
 			/**
-			 * Select a block by its name using the WordPress data API.
-			 * @param {string} blockName - The block name (e.g., 'core/query').
-			 * @param {number} index     - The index of the block to select (default: 0).
-			 */
-			async selectBlockByName( blockName, index = 0 ) {
-				await page.evaluate(
-					( { name, idx } ) => {
-						const blocks = window.wp.data
-							.select( 'core/block-editor' )
-							.getBlocksByName( name );
-						if ( blocks.length > idx ) {
-							window.wp.data
-								.dispatch( 'core/block-editor' )
-								.selectBlock( blocks[ idx ] );
-						}
-					},
-					{ name: blockName, idx: index }
-				);
-				await page.waitForTimeout( 1000 );
-			},
-
-			/**
 			 * Open the settings sidebar and wait for it to be ready.
 			 */
 			async openSettingsSidebar() {
@@ -145,61 +123,124 @@ export const test = base.extend( {
 			},
 
 			/**
+			 * Publish post and visit it.
+			 */
+			async publishAndVisit() {
+				// Publish and view the page
+				await page
+					.getByRole( 'button', { name: 'Publish', exact: true } )
+					.click();
+				await page
+					.getByLabel( 'Editor publish' )
+					.getByRole( 'button', { name: 'Publish', exact: true } )
+					.click();
+				const newURL = await page
+					.getByLabel( 'Editor publish' )
+					.getByRole( 'link', { name: /^View (Post|Page)/ } )
+					.getAttribute( 'href' );
+				await page.goto( newURL, { waitUntil: 'domcontentloaded' } );
+			},
+
+			/**
 			 * Get the editor canvas from the site editor.
 			 */
 			get canvas() {
 				return editor.canvas;
 			},
-		};
 
-		await use( siteEditorUtils );
-	},
+			selectBlock: {
+				/**
+				 * Select a block by its name.
+				 * @param {string} blockName - The block name (e.g., 'core/post-template').
+				 * @param {number} index     - The index of the block to select (default: 0).
+				 */
+				async byName( blockName, index = 0 ) {
+					await page.evaluate(
+						( { name, idx } ) => {
+							const blocks = window.wp.data
+								.select( 'core/block-editor' )
+								.getBlocksByName( name );
+							if ( blocks.length > idx ) {
+								window.wp.data
+									.dispatch( 'core/block-editor' )
+									.selectBlock( blocks[ idx ] );
+							}
+						},
+						{ name: blockName, idx: index }
+					);
+					await page.waitForTimeout( 500 );
+				},
 
-	/**
-	 * Helper to select a block by name using the WordPress data API.
-	 * @param root0
-	 * @param root0.page
-	 * @param use
-	 */
-	selectBlock: async ( { page }, use ) => {
-		const selectBlock = {
-			/**
-			 * Select a block by its name.
-			 * @param {string} blockName - The block name (e.g., 'core/post-template').
-			 * @param {number} index     - The index of the block to select (default: 0).
-			 */
-			async byName( blockName, index = 0 ) {
-				await page.evaluate(
-					( { name, idx } ) => {
-						const blocks = window.wp.data
-							.select( 'core/block-editor' )
-							.getBlocksByName( name );
-						if ( blocks.length > idx ) {
-							window.wp.data
-								.dispatch( 'core/block-editor' )
-								.selectBlock( blocks[ idx ] );
+				/**
+				 * Select a block by its client ID.
+				 * @param {string} clientId - The block's client ID.
+				 */
+				async byId( clientId ) {
+					await page.evaluate( ( id ) => {
+						window.wp.data
+							.dispatch( 'core/block-editor' )
+							.selectBlock( id );
+					}, clientId );
+					await page.waitForTimeout( 500 );
+				},
+			},
+			queryBlock: {
+				async setAsCustom() {
+					const customRadio = page.getByRole( 'radio', {
+						name: 'Custom',
+					} );
+					if (
+						await customRadio
+							.isVisible( { timeout: 1000 } )
+							.catch( () => false )
+					) {
+						await customRadio.click();
+					}
+				},
+				async openSettingsPanel() {
+					const extraSettingsPanel = page.locator(
+						'.components-panel__body-title:has-text("Extra Query Loop Settings")'
+					);
+					if (
+						await extraSettingsPanel
+							.isVisible( { timeout: 2000 } )
+							.catch( () => false )
+					) {
+						const isExpanded = await extraSettingsPanel
+							.locator( 'button' )
+							.getAttribute( 'aria-expanded' );
+						if ( isExpanded !== 'true' ) {
+							await extraSettingsPanel
+								.locator( 'button' )
+								.click();
+							await page.waitForTimeout( 300 );
 						}
-					},
-					{ name: blockName, idx: index }
-				);
-				await page.waitForTimeout( 500 );
-			},
-
-			/**
-			 * Select a block by its client ID.
-			 * @param {string} clientId - The block's client ID.
-			 */
-			async byId( clientId ) {
-				await page.evaluate( ( id ) => {
-					window.wp.data
-						.dispatch( 'core/block-editor' )
-						.selectBlock( id );
-				}, clientId );
-				await page.waitForTimeout( 500 );
+					}
+				},
+				async excludeDisplayed() {
+					const excludeDisplayedToggle = page
+						.locator(
+							'label:has-text("Exclude already displayed Posts")'
+						)
+						.locator( '..' )
+						.locator( 'input[type="checkbox"]' );
+					if (
+						await excludeDisplayedToggle
+							.isVisible( { timeout: 2000 } )
+							.catch( () => false )
+					) {
+						const isChecked =
+							await excludeDisplayedToggle.isChecked();
+						if ( ! isChecked ) {
+							await excludeDisplayedToggle.click();
+							await page.waitForTimeout( 500 );
+						}
+					}
+				},
 			},
 		};
 
-		await use( selectBlock );
+		await use( blockEditorUtils );
 	},
 } );
 
@@ -231,4 +272,5 @@ export function resetDatabase() {
 	wpCli(
 		`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`
 	);
+	wpCli( `wp cache flush` );
 }
