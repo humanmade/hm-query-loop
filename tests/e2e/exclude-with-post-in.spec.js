@@ -109,7 +109,7 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.getByRole( 'toolbar', { name: 'Block tools' } )
 			.getByLabel( 'Options' )
 			.click();
-		await page.getByRole( 'menuitem', { name: 'Add after ⌥⌘Y' } ).click();
+		await page.getByRole( 'menuitem', { name: 'Add after' } ).click();
 
 		// Insert second query loop (regular one, not AQL)
 		await canvas
