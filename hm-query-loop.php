@@ -32,11 +32,11 @@ function init() {
 	add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\enqueue_block_editor_assets', 9 );
 
 	// Register block filters.
-	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 10, 3 );
-	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 10, 2 );
+	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 11, 3 );
+	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 11, 2 );
 
 	// Hook query_loop_block_query_vars to modify the query.
-	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 10, 2 );
+	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 2 );
 
 	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
@@ -45,7 +45,7 @@ function init() {
 	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_block_metadata' );
 }
 
-add_action( 'init', __NAMESPACE__ . '\\init' );
+add_action( 'init', __NAMESPACE__ . '\\init', 9 );
 
 /**
  * Enqueue block editor assets.
@@ -58,7 +58,9 @@ function enqueue_block_editor_assets() {
 		HM_QUERY_LOOP_URL . 'build/index.js',
 		$asset_file['dependencies'],
 		$asset_file['version'],
-		true
+		[
+			'in_footer' => false,
+		]
 	);
 
 	// Pass the posts_per_page setting to JavaScript
@@ -88,14 +90,14 @@ function filter_block_metadata( $metadata ) {
 	if ( $metadata['name'] === 'core/query' ) {
 		$metadata['providesContext'] = array_merge(
 			$metadata['providesContext'] ?? [],
-			[ 'hm-query-loop/settings' ]
+			[ 'hmQueryLoop' => 'hmQueryLoop' ]
 		);
 	}
 
 	if ( $metadata['name'] === 'core/post-template' ) {
 		$metadata['usesContext'] = array_merge(
 			$metadata['usesContext'] ?? [],
-			[ 'hm-query-loop/settings' ]
+			[ 'hmQueryLoop' ]
 		);
 	}
 
@@ -273,7 +275,12 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 	if ( $block->name === 'core/post-template' ) {
 		global $query_loop_post_template_per_pages;
 
+		// Merge hmQueryLoop context with post template block attribute.
 		$attrs = $block->parsed_block['attrs'];
+		$attrs['hmQueryLoop'] = wp_parse_args(
+			$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
+			$block->context['hmQueryLoop'] ?? [],
+		);
 		$query_id = $block->context['queryId'] ?? 0;
 
 		// Initialize tracking array for this query loop if not exists
@@ -309,6 +316,37 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 }
 
 /**
+ * Exclude posts from a query by handling both post__not_in and post__in parameters.
+ *
+ * When post__in is set, WordPress ignores post__not_in. This function ensures
+ * exclusions work correctly by filtering post__in directly when present.
+ *
+ * @param array $query        The query args array.
+ * @param array $excluded_ids Post IDs to exclude.
+ * @return array Modified query args.
+ */
+function exclude_posts_from_query( $query, $excluded_ids ) {
+	if ( empty( $excluded_ids ) ) {
+		return $query;
+	}
+
+	// If post__in is set, filter out excluded IDs from it.
+	// This is necessary because post__in takes precedence over post__not_in in WordPress.
+	if ( ! empty( $query['post__in'] ) && is_array( $query['post__in'] ) ) {
+		$query['post__in'] = array_values( array_diff( $query['post__in'], $excluded_ids ) );
+	}
+
+	// Also set post__not_in for queries without post__in.
+	$existing_exclusions = $query['post__not_in'] ?? [];
+	if ( ! is_array( $existing_exclusions ) ) {
+		$existing_exclusions = [];
+	}
+	$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $excluded_ids ) );
+
+	return $query;
+}
+
+/**
  * Modify query using pre_get_posts based on block attributes.
  * This is hooked/unhooked dynamically around Query Loop block rendering.
  *
@@ -341,11 +379,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	if ( isset( $settings['excludeDisplayed'] ) && $settings['excludeDisplayed'] ) {
 		$displayed_ids = get_displayed_post_ids();
 		if ( ! empty( $displayed_ids ) ) {
-			$existing_exclusions = $query['post__not_in'] ?? [];
-			if ( ! is_array( $existing_exclusions ) ) {
-				$existing_exclusions = [];
-			}
-			$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $displayed_ids ) );
+			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
 
@@ -354,11 +388,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 		$query['query_id'] = $settings['excludeDisplayedForCurrentLoop'];
 		$displayed_ids = get_query_loop_used_posts( $settings['excludeDisplayedForCurrentLoop'] );
 		if ( ! empty( $displayed_ids ) ) {
-			$existing_exclusions = $query['post__not_in'] ?? [];
-			if ( ! is_array( $existing_exclusions ) ) {
-				$existing_exclusions = [];
-			}
-			$query['post__not_in'] = array_unique( array_merge( $existing_exclusions, $displayed_ids ) );
+			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
 
