@@ -7,7 +7,7 @@ import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
 import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { createContext, useContext } from '@wordpress/element';
+import { createContext, useContext, useEffect } from '@wordpress/element';
 
 /**
  * Styles
@@ -53,6 +53,55 @@ addFilter(
 	'blocks.registerBlockType',
 	'hm-query-loop/add-query-loop-attributes',
 	addQueryLoopAttributes
+);
+
+/**
+ * Ensure each Query Loop block has a unique queryId attribute.
+ *
+ * WordPress core does not deduplicate queryId when blocks are duplicated.
+ * This HOC generates a unique queryId from the current post ID and the
+ * block's index among all query blocks on the page.
+ */
+const withUniqueQueryId = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, attributes, setAttributes, clientId } = props;
+
+		if ( name !== 'core/query' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		const expectedQueryId = useSelect(
+			( select ) => {
+				let postId = 0;
+				try {
+					postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
+				} catch {
+					postId = 0;
+				}
+				const allQueryBlocks =
+					select( 'core/block-editor' ).getBlocksByName(
+						'core/query'
+					);
+				const index = allQueryBlocks.indexOf( clientId );
+				return postId * 1000 + index + 1;
+			},
+			[ clientId ]
+		);
+
+		useEffect( () => {
+			if ( attributes.queryId !== expectedQueryId ) {
+				setAttributes( { queryId: expectedQueryId } );
+			}
+		}, [ expectedQueryId, attributes.queryId, setAttributes ] );
+
+		return <BlockEdit { ...props } />;
+	};
+}, 'withUniqueQueryId' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-unique-query-id',
+	withUniqueQueryId
 );
 
 /**
