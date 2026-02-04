@@ -31,6 +31,9 @@ function init() {
 	// Enqueue block editor assets.
 	add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\enqueue_block_editor_assets', 9 );
 
+	// Deduplicate query IDs for query loop blocks.
+	add_filter( 'pre_render_block', __NAMESPACE__ . '\\deduplicate_query_ids', 10, 2 );
+
 	// Register block filters.
 	add_filter( 'pre_render_block', __NAMESPACE__ . '\\pre_render_block', 11, 3 );
 	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 11, 2 );
@@ -173,6 +176,94 @@ function add_query_loop_used_posts( $query_id, $post_ids ) {
 		$query_loop_used_posts[ $query_id ] = [];
 	}
 	$query_loop_used_posts[ $query_id ] = array_unique( array_merge( $query_loop_used_posts[ $query_id ], $post_ids ) );
+}
+
+/**
+ * Ensure each core/query block has a unique queryId during server-side rendering.
+ *
+ * Uses a static instance counter combined with the current post ID to generate
+ * unique query IDs. Dynamically adds a render_block_context filter to set the
+ * queryId for child core/post-template blocks, and removes it when the query
+ * block finishes rendering.
+ *
+ * @param string|null $pre_render   The pre-rendered content. Default null.
+ * @param array       $parsed_block The block being rendered.
+ * @return string|null
+ */
+function deduplicate_query_ids( $pre_render, $parsed_block ) {
+	static $instance_count = 0;
+	static $used_query_ids = [];
+
+	if ( 'core/query' !== $parsed_block['blockName'] ) {
+		return $pre_render;
+	}
+
+	$original_query_id = $parsed_block['attrs']['queryId'] ?? null;
+
+	// Only override the queryId if it has already been used by a previous
+	// query block. This preserves the original value when possible,
+	// improving interoperability with other plugins.
+	if ( $original_query_id !== null && ! in_array( $original_query_id, $used_query_ids, true ) ) {
+		$used_query_ids[] = $original_query_id;
+		return $pre_render;
+	}
+
+	$instance_count++;
+	$post_id = get_the_ID() ?: 0;
+	$unique_query_id = $post_id * 1000 + $instance_count;
+
+	// Ensure the generated ID doesn't collide with any already-used ID.
+	while ( in_array( $unique_query_id, $used_query_ids, true ) ) {
+		$instance_count++;
+		$unique_query_id = $post_id * 1000 + $instance_count;
+	}
+
+	$used_query_ids[] = $unique_query_id;
+
+	// Track nesting depth so the render_block cleanup only fires
+	// for this specific query block, not nested ones.
+	$depth = 0;
+
+	// Dynamically add a render_block_context filter to override queryId
+	// for any core/post-template blocks inside this query.
+	$context_filter = function ( $context, $inner_parsed_block ) use ( $unique_query_id ) {
+		if ( 'core/post-template' === $inner_parsed_block['blockName'] ) {
+			$context['queryId'] = $unique_query_id;
+		}
+		return $context;
+	};
+
+	// Track nested core/query blocks to avoid premature cleanup.
+	$pre_depth_filter = function ( $pre, $block ) use ( &$depth ) {
+		if ( 'core/query' === $block['blockName'] ) {
+			$depth++;
+		}
+		return $pre;
+	};
+
+	// Remove the context filter when this query block finishes rendering.
+	$render_filter = function ( $block_content, $block ) use ( $context_filter, &$render_filter, &$pre_depth_filter, &$depth ) {
+		if ( 'core/query' !== $block['blockName'] ) {
+			return $block_content;
+		}
+
+		if ( $depth > 0 ) {
+			$depth--;
+			return $block_content;
+		}
+
+		remove_filter( 'render_block_context', $context_filter, 10 );
+		remove_filter( 'render_block', $render_filter, 9 );
+		remove_filter( 'pre_render_block', $pre_depth_filter, 9 );
+
+		return $block_content;
+	};
+
+	add_filter( 'render_block_context', $context_filter, 10, 2 );
+	add_filter( 'pre_render_block', $pre_depth_filter, 9, 2 );
+	add_filter( 'render_block', $render_filter, 9, 2 );
+
+	return $pre_render;
 }
 
 /**
