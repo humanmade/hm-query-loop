@@ -46,6 +46,9 @@ function init() {
 
 	// Add contexts to query and post-template block.
 	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_block_metadata' );
+
+	// Register the preview block for server-side rendering in the editor.
+	register_preview_block();
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
@@ -506,4 +509,46 @@ function track_displayed_posts( $posts, $query ) {
 	}
 
 	return $posts;
+}
+
+/**
+ * Register the preview block used for server-side rendering query loop
+ * previews in the editor. This block is not insertable by users.
+ */
+function register_preview_block() {
+	register_block_type(
+		'hm-query-loop/preview',
+		[
+			'api_version'     => 3,
+			'attributes'      => [
+				'content' => [
+					'type'    => 'string',
+					'default' => '',
+				],
+			],
+			'supports'        => [
+				'inserter' => false,
+			],
+			'render_callback' => __NAMESPACE__ . '\\render_preview_block',
+		]
+	);
+}
+
+/**
+ * Render callback for the preview block.
+ *
+ * Processes the serialized block content through do_blocks() to produce
+ * the same output as a frontend page render.
+ *
+ * @param array $attributes Block attributes containing 'content'.
+ * @return string Rendered HTML.
+ */
+function render_preview_block( $attributes ) {
+	$content = $attributes['content'] ?? '';
+
+	if ( empty( $content ) ) {
+		return '';
+	}
+
+	return do_blocks( $content );
 }

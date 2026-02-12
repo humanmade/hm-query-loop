@@ -5,9 +5,21 @@ import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
+import {
+	Disabled,
+	PanelBody,
+	ToggleControl,
+	TextControl,
+} from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { createContext, useContext, useEffect } from '@wordpress/element';
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useMemo,
+} from '@wordpress/element';
+import ServerSideRender from '@wordpress/server-side-render';
+import { serialize } from '@wordpress/blocks';
 
 /**
  * Styles
@@ -492,4 +504,76 @@ addFilter(
 	'editor.BlockEdit',
 	'hm-query-loop/with-post-template-styles',
 	withPostTemplateStyles
+);
+
+/**
+ * Replace the Query Loop block content with a server-side rendered preview
+ * when the block is not selected. This avoids the many API requests that
+ * inner blocks make to load content, which is costly on pages with lots of
+ * query loops. When the user clicks on the block it switches to the full
+ * editor.
+ */
+const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, clientId } = props;
+
+		if ( name !== 'core/query' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		const isSelected = useSelect(
+			( select ) => {
+				const { isBlockSelected, hasSelectedInnerBlock } =
+					select( 'core/block-editor' );
+				return (
+					isBlockSelected( clientId ) ||
+					hasSelectedInnerBlock( clientId, true )
+				);
+			},
+			[ clientId ]
+		);
+
+		const block = useSelect(
+			( select ) => {
+				return select( 'core/block-editor' ).getBlock( clientId );
+			},
+			[ clientId ]
+		);
+
+		const postId = useSelect( ( select ) => {
+			try {
+				return select( 'core/editor' )?.getCurrentPostId?.() || 0;
+			} catch {
+				return 0;
+			}
+		}, [] );
+
+		const serializedContent = useMemo( () => {
+			if ( ! block ) {
+				return '';
+			}
+			return serialize( [ block ] );
+		}, [ block ] );
+
+		if ( isSelected ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		return (
+			<Disabled>
+				<ServerSideRender
+					block="hm-query-loop/preview"
+					attributes={ { content: serializedContent } }
+					httpMethod="POST"
+					urlQueryArgs={ { post_id: postId } }
+				/>
+			</Disabled>
+		);
+	};
+}, 'withSSRPreview' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-ssr-preview',
+	withSSRPreview
 );
