@@ -5,12 +5,7 @@ import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
-import {
-	Disabled,
-	PanelBody,
-	ToggleControl,
-	TextControl,
-} from '@wordpress/components';
+import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import {
 	createContext,
@@ -19,12 +14,34 @@ import {
 	useMemo,
 } from '@wordpress/element';
 import ServerSideRender from '@wordpress/server-side-render';
-import { serialize } from '@wordpress/blocks';
+import { registerBlockType, serialize } from '@wordpress/blocks';
 
 /**
  * Styles
  */
 import './index.scss';
+
+/**
+ * Register the preview block used for server-side rendering query loop
+ * previews. This block is not insertable and has no editor UI; it exists
+ * solely so the ServerSideRender component can resolve the block type
+ * when sanitizing attributes before making the API request.
+ */
+registerBlockType( 'hm-query-loop/preview', {
+	title: 'Query Loop Preview',
+	category: 'widgets',
+	supports: {
+		inserter: false,
+	},
+	attributes: {
+		content: {
+			type: 'string',
+			default: '',
+		},
+	},
+	edit: () => null,
+	save: () => null,
+} );
 
 /**
  * Create a context for tracking used post IDs within a query loop in the editor.
@@ -560,14 +577,12 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 		}
 
 		return (
-			<Disabled>
-				<ServerSideRender
-					block="hm-query-loop/preview"
-					attributes={ { content: serializedContent } }
-					httpMethod="POST"
-					urlQueryArgs={ { post_id: postId } }
-				/>
-			</Disabled>
+			<ServerSideRender
+				block="hm-query-loop/preview"
+				attributes={ { content: serializedContent } }
+				httpMethod="POST"
+				urlQueryArgs={ { post_id: postId } }
+			/>
 		);
 	};
 }, 'withSSRPreview' );
