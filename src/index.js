@@ -5,18 +5,14 @@ import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
-import {
-	Disabled,
-	PanelBody,
-	ToggleControl,
-	TextControl,
-} from '@wordpress/components';
+import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import {
 	createContext,
 	useContext,
 	useEffect,
 	useMemo,
+	useState,
 } from '@wordpress/element';
 import ServerSideRender from '@wordpress/server-side-render';
 import { registerBlockType, serialize } from '@wordpress/blocks';
@@ -530,10 +526,14 @@ addFilter(
 
 /**
  * Replace the Query Loop block content with a server-side rendered preview
- * when the block is not selected. This avoids the many API requests that
- * inner blocks make to load content, which is costly on pages with lots of
- * query loops. When the user clicks on the block it switches to the full
- * editor.
+ * when the block has not yet been selected. This avoids the many API requests
+ * that inner blocks make to load content, which is costly on pages with lots
+ * of query loops. Once the user clicks on the block it switches to the full
+ * editor and stays live from that point on.
+ *
+ * The rendered HTML has the inert attribute on its top-level elements
+ * (added server-side) to prevent link navigation without wrapping in a
+ * Disabled component that changes the DOM structure.
  */
 const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -542,6 +542,8 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 		if ( name !== 'core/query' ) {
 			return <BlockEdit { ...props } />;
 		}
+
+		const [ isActivated, setIsActivated ] = useState( false );
 
 		const isSelected = useSelect(
 			( select ) => {
@@ -555,11 +557,21 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 			[ clientId ]
 		);
 
+		// Once selected, stay in edit mode permanently.
+		useEffect( () => {
+			if ( isSelected && ! isActivated ) {
+				setIsActivated( true );
+			}
+		}, [ isSelected, isActivated ] );
+
 		const block = useSelect(
 			( select ) => {
+				if ( isActivated ) {
+					return null;
+				}
 				return select( 'core/block-editor' ).getBlock( clientId );
 			},
-			[ clientId ]
+			[ clientId, isActivated ]
 		);
 
 		const postId = useSelect( ( select ) => {
@@ -578,21 +590,19 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 			return serialize( [ block ] );
 		}, [ block ] );
 
-		if ( isSelected ) {
+		if ( isActivated ) {
 			return <BlockEdit { ...props } />;
 		}
 
 		const urlQueryArgs = postId ? { post_id: postId } : {};
 
 		return (
-			<Disabled>
-				<ServerSideRender
-					block="hm-query-loop/preview"
-					attributes={ { content: serializedContent } }
-					httpMethod="POST"
-					urlQueryArgs={ urlQueryArgs }
-				/>
-			</Disabled>
+			<ServerSideRender
+				block="hm-query-loop/preview"
+				attributes={ { content: serializedContent } }
+				httpMethod="POST"
+				urlQueryArgs={ urlQueryArgs }
+			/>
 		);
 	};
 }, 'withSSRPreview' );

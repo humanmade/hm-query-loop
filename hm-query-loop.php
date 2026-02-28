@@ -538,7 +538,9 @@ function register_preview_block() {
  * Render callback for the preview block.
  *
  * Processes the serialized block content through do_blocks() to produce
- * the same output as a frontend page render.
+ * the same output as a frontend page render. Adds the inert attribute to
+ * all top-level child elements so that links and interactive elements
+ * cannot be clicked in the editor preview.
  *
  * @param array $attributes Block attributes containing 'content'.
  * @return string Rendered HTML.
@@ -550,5 +552,15 @@ function render_preview_block( $attributes ) {
 		return '';
 	}
 
-	return do_blocks( $content );
+	$html = do_blocks( $content );
+
+	$processor = new \WP_HTML_Tag_Processor( $html );
+	while ( $processor->next_tag() ) {
+		// Only process top-level elements (depth 0).
+		if ( $processor->get_current_depth() === 0 ) {
+			$processor->set_attribute( 'inert', true );
+		}
+	}
+
+	return $processor->get_updated_html();
 }
