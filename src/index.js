@@ -5,7 +5,12 @@ import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
 import { InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, ToggleControl, TextControl } from '@wordpress/components';
+import {
+	Disabled,
+	PanelBody,
+	ToggleControl,
+	TextControl,
+} from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import {
 	createContext,
@@ -580,12 +585,14 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 		const urlQueryArgs = postId ? { post_id: postId } : {};
 
 		return (
-			<ServerSideRender
-				block="hm-query-loop/preview"
-				attributes={ { content: serializedContent } }
-				httpMethod="POST"
-				urlQueryArgs={ urlQueryArgs }
-			/>
+			<Disabled>
+				<ServerSideRender
+					block="hm-query-loop/preview"
+					attributes={ { content: serializedContent } }
+					httpMethod="POST"
+					urlQueryArgs={ urlQueryArgs }
+				/>
+			</Disabled>
 		);
 	};
 }, 'withSSRPreview' );
