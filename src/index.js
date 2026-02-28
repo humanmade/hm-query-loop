@@ -559,7 +559,8 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 
 		const postId = useSelect( ( select ) => {
 			try {
-				return select( 'core/editor' )?.getCurrentPostId?.() || 0;
+				const id = select( 'core/editor' )?.getCurrentPostId?.();
+				return Number.isInteger( id ) && id > 0 ? id : 0;
 			} catch {
 				return 0;
 			}
@@ -576,12 +577,14 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 			return <BlockEdit { ...props } />;
 		}
 
+		const urlQueryArgs = postId ? { post_id: postId } : {};
+
 		return (
 			<ServerSideRender
 				block="hm-query-loop/preview"
 				attributes={ { content: serializedContent } }
 				httpMethod="POST"
-				urlQueryArgs={ { post_id: postId } }
+				urlQueryArgs={ urlQueryArgs }
 			/>
 		);
 	};
