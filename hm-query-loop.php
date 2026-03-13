@@ -81,6 +81,14 @@ function enqueue_block_editor_assets() {
 		[],
 		$asset_file['version']
 	);
+
+	wp_enqueue_script(
+		'hm-query-loop-manual-posts',
+		HM_QUERY_LOOP_URL . 'assets/manual-posts.js',
+		[ 'wp-blocks', 'wp-element', 'wp-hooks', 'wp-components', 'wp-compose', 'wp-block-editor', 'wp-api-fetch' ],
+		filemtime( HM_QUERY_LOOP_PATH . 'assets/manual-posts.js' ),
+		[ 'in_footer' => false ]
+	);
 }
 
 /**
@@ -447,6 +455,29 @@ function exclude_posts_from_query( $query, $excluded_ids ) {
  */
 function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	global $original_paged;
+
+	// Manual post selection: if manualPosts is set in the query context,
+	// override the query to show only those posts in the chosen order.
+	$manual_posts = $attrs['query']['manualPosts'] ?? [];
+	if ( ! empty( $manual_posts ) ) {
+		$ids = array_values(
+			array_filter(
+				array_map(
+					function( $p ) {
+						return is_array( $p ) ? intval( $p['id'] ) : intval( $p );
+					},
+					$manual_posts
+				)
+			)
+		);
+
+		if ( ! empty( $ids ) ) {
+			$query['post__in']            = $ids;
+			$query['orderby']             = 'post__in';
+			$query['posts_per_page']      = count( $ids );
+			$query['ignore_sticky_posts'] = true;
+		}
+	}
 
 	// Get the hmQueryLoop settings object.
 	$settings = $attrs['hmQueryLoop'] ?? [];
