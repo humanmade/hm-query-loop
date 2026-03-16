@@ -5,32 +5,8 @@ const { PanelBody, FormTokenField } = wp.components;
 const { Fragment, useState } = wp.element;
 const apiFetch = wp.apiFetch;
 
-
-/**
- * Extend Query Loop attributes
- */
-function addAttributes(settings, name) {
-
-	if (name !== "core/query") {
-		return settings;
-	}
-
-	settings.attributes = {
-		...settings.attributes,
-		query: {
-			type: "object",
-			default: {}
-		}
-	};
-
-	return settings;
-}
-
-addFilter(
-	"blocks.registerBlockType",
-	"manual-query-loop/add-attributes",
-	addAttributes
-);
+// Module-level map avoids stale closure bugs with useState in onChange callbacks.
+const _titleToId = {};
 
 
 /**
@@ -52,7 +28,6 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 		const tokens = selected.map((p) => p.title);
 
 		const [ suggestions, setSuggestions ] = useState([]);
-		const [ map, setMap ] = useState({});
 
 
 		const searchPosts = (value) => {
@@ -64,15 +39,13 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 			}).then((results) => {
 
 				const titles = [];
-				const newMap = {};
 
 				results.forEach((r) => {
 					titles.push(r.title);
-					newMap[r.title] = r.id;
+					_titleToId[r.title] = r.id;
 				});
 
 				setSuggestions(titles);
-				setMap(newMap);
 
 			});
 
@@ -87,22 +60,40 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 				if (existing) return existing;
 
 				return {
-					id: map[title],
+					id: _titleToId[title],
 					title: title
 				};
 
 			}).filter((p) => p && p.id);
 
-			setAttributes({
-				query: {
-					...query,
-					manualPosts: posts,
-					perPage: posts.length,
-					per_page: posts.length,
-					offset: 0,
-					inherit: false
-				}
-			});
+			const ids = posts.map((p) => p.id);
+
+			// When posts are selected: force include + disable inherit so the
+			// editor preview updates live. When cleared: restore normal behavior.
+			if ( ids.length > 0 ) {
+				setAttributes({
+					query: {
+						...query,
+						manualPosts: posts,
+						include: ids,
+						perPage: ids.length,
+						per_page: ids.length,
+						offset: 0,
+						inherit: false
+					}
+				});
+			} else {
+				setAttributes({
+					query: {
+						...query,
+						manualPosts: [],
+						include: undefined,
+						perPage: query.perPage,
+						per_page: query.per_page,
+						offset: query.offset
+					}
+				});
+			}
 
 		};
 

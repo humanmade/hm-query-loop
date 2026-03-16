@@ -380,6 +380,10 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 			$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
 			$block->context['hmQueryLoop'] ?? [],
 		);
+		// Pass the parent core/query block's query object (including manualPosts) to the modifier.
+		if ( empty( $attrs['query'] ) ) {
+			$attrs['query'] = $block->context['query'] ?? [];
+		}
 		$query_id = $block->context['queryId'] ?? 0;
 
 		// Initialize tracking array for this query loop if not exists
@@ -493,7 +497,8 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	}
 
 	// Apply custom posts per page if set and is a valid number.
-	if ( isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
+	// Skip when manual post selection is active — it already sets posts_per_page precisely.
+	if ( empty( $manual_posts ) && isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
 		$query['posts_per_page'] = (int) $settings['perPage'];
 	}
 
