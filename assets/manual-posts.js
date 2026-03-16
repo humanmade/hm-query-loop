@@ -1,7 +1,7 @@
 const { addFilter } = wp.hooks;
 const { createHigherOrderComponent } = wp.compose;
 const { InspectorControls } = wp.blockEditor;
-const { PanelBody, FormTokenField } = wp.components;
+const { PanelBody, FormTokenField, ToggleControl } = wp.components;
 const { Fragment, useState } = wp.element;
 const apiFetch = wp.apiFetch;
 
@@ -24,10 +24,50 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 
 		const query = attributes.query || {};
 		const selected = query.manualPosts || [];
+		const isManual = query.manualSelect === true;
 
 		const tokens = selected.map((p) => p.title);
 
 		const [ suggestions, setSuggestions ] = useState([]);
+
+
+		const onToggleManual = (value) => {
+			if ( value ) {
+				// Re-enable: manualPosts already stored in query (preserved from last session).
+				// Derive include + perPage from them so the editor preview updates immediately.
+				const restored = query.manualPosts || [];
+				const ids = restored.map( (p) => p.id );
+
+				// Rebuild _titleToId so onChange works with existing selections immediately.
+				restored.forEach( (p) => { _titleToId[ p.title ] = p.id; } );
+
+				setAttributes({
+					query: {
+						...query,
+						manualSelect: true,
+						_previousInherit: query.inherit,
+						_previousPerPage: query.perPage,
+						inherit: false,
+						...( ids.length > 0 && {
+							include: ids,
+							perPage: ids.length,
+						} )
+					}
+				});
+			} else {
+				// Disable: remove only the active-mode derived keys (include, perPage).
+				// manualPosts is intentionally kept so it can be restored on re-enable.
+				// eslint-disable-next-line no-unused-vars
+				const { include: _inc, manualSelect: _ms, _previousInherit, perPage: _pp, per_page: _ppp, _previousPerPage, ...restQuery } = query;
+				setAttributes({
+					query: {
+						...restQuery,
+						inherit: _previousInherit !== undefined ? _previousInherit : restQuery.inherit || false,
+						...( _previousPerPage !== undefined && { perPage: _previousPerPage } )
+					}
+				});
+			}
+		};
 
 
 		const searchPosts = (value) => {
@@ -77,20 +117,15 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 						manualPosts: posts,
 						include: ids,
 						perPage: ids.length,
-						per_page: ids.length,
-						offset: 0,
-						inherit: false
 					}
 				});
 			} else {
+				// eslint-disable-next-line no-unused-vars
+				const { include: _inc, perPage: _pp, per_page: _ppp, ...restQuery } = query;
 				setAttributes({
 					query: {
-						...query,
-						manualPosts: [],
-						include: undefined,
-						perPage: query.perPage,
-						per_page: query.per_page,
-						offset: query.offset
+						...restQuery,
+						manualPosts: []
 					}
 				});
 			}
@@ -107,8 +142,13 @@ const withInspectorControls = createHigherOrderComponent((BlockEdit) => {
 				{},
 				wp.element.createElement(
 					PanelBody,
-					{ title: "Manual Post Selection", initialOpen: true },
-					wp.element.createElement(FormTokenField, {
+					{ title: "Manual Post Selection", initialOpen: false },
+					wp.element.createElement(ToggleControl, {
+						label: "Enable manual post selection",
+						checked: isManual,
+						onChange: onToggleManual
+					}),
+					isManual && wp.element.createElement(FormTokenField, {
 						label: "Search and select posts",
 						value: tokens,
 						suggestions: suggestions,

@@ -460,9 +460,9 @@ function exclude_posts_from_query( $query, $excluded_ids ) {
 function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	global $original_paged;
 
-	// Manual post selection: if manualPosts is set in the query context,
-	// override the query to show only those posts in the chosen order.
-	$manual_posts = $attrs['query']['manualPosts'] ?? [];
+	// Manual post selection: only active when manualSelect flag is set.
+	$manual_select = $attrs['query']['manualSelect'] ?? false;
+	$manual_posts  = $manual_select ? ( $attrs['query']['manualPosts'] ?? [] ) : [];
 	if ( ! empty( $manual_posts ) ) {
 		$ids = array_values(
 			array_filter(
