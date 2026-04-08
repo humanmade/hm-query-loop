@@ -5,6 +5,9 @@
 		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
 	],
 	"themes": [ "WordPress/twentytwentyfour", "WordPress/twentytwentyfive" ],
+	"mappings": {
+		"wp-content/mu-plugins": "./tests/mu-plugins"
+	},
 	"port": 8888,
 	"testsPort": 8889,
 	"config": {

@@ -20,6 +20,15 @@ Enable this option to automatically exclude posts that have been displayed by pr
 
 **Important:** The exclusion applies to all query loops rendered before the current one, regardless of whether they were visible (e.g., hidden due to pagination settings).
 
+### 4. Query Presets
+
+Register custom query configurations in PHP that can be selected from a dropdown in the block editor. This allows developers to create reusable, dynamic queries (like "Related Articles" or "Trending Posts") that content editors can easily apply to any Query Loop block.
+
+**Key Benefits:**
+- Define complex query logic in PHP while keeping the editor interface simple
+- Queries work in both the editor preview and on the frontend
+- Automatically hooks into all public post types via the REST API
+
 ## Installation
 
 1. Upload the plugin to your `/wp-content/plugins/` directory
@@ -67,6 +76,7 @@ See [tests/e2e/README.md](tests/e2e/README.md) for more details on the test setu
 1. Add a Query Loop block to your page or template
 2. In the block settings sidebar, find the "HM Query Loop Settings" panel
 3. Configure the options as needed:
+   - **Query Preset**: Select a predefined query configuration (only visible when presets are registered)
    - **Posts per page (Override)**: Only visible when inheriting query - enter a number to override posts per page, or leave empty to use default
    - **Hide on paginated pages**: Toggle to hide this block on page 2+
    - **Exclude already displayed posts**: Toggle to avoid showing duplicate posts
@@ -118,6 +128,43 @@ Note: Since `query_loop_block_query_vars` doesn't fire for inherited queries, we
 - **`the_posts`**: Runs after posts are fetched
   - Tracks post IDs from Query Loop blocks (both approaches) and main query
   - Builds a global list for subsequent query loops to exclude
+
+### Query Presets:
+
+Register custom query presets that appear in the block editor and modify queries on both frontend and REST API requests.
+
+```php
+// In your theme's functions.php or a plugin
+add_action( 'init', function() {
+    \HM\QueryLoop\QueryPresets\register_query_preset(
+        'related_articles',           // Unique identifier
+        'Related Articles',           // Label shown in dropdown
+        function( $query_vars, $context ) {
+            // $context includes:
+            // - post_id: Current post ID (useful for related content)
+            // - is_rest: Boolean, true when called from REST API (editor)
+            // - block: Array with perPage and page values
+
+            $related_ids = get_post_meta( $context['post_id'], 'related_posts', true );
+
+            if ( ! empty( $related_ids ) ) {
+                $query_vars['post__in'] = $related_ids;
+                $query_vars['orderby'] = 'post__in';
+            }
+
+            return $query_vars;
+        }
+    );
+});
+```
+
+**Available Functions:**
+
+- `\HM\QueryLoop\QueryPresets\register_query_preset( $name, $label, $callback )` - Register a preset
+- `\HM\QueryLoop\QueryPresets\unregister_query_preset( $name )` - Remove a preset
+- `\HM\QueryLoop\QueryPresets\get_registered_presets()` - Get all registered presets
+- `\HM\QueryLoop\QueryPresets\get_query_preset( $name )` - Get a specific preset
+- `\HM\QueryLoop\QueryPresets\apply_query_preset( $name, $query_vars, $context )` - Manually apply a preset
 
 ## Example Use Case
 
