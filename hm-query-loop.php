@@ -24,6 +24,9 @@ define( 'HM_QUERY_LOOP_VERSION', '__VERSION__' );
 define( 'HM_QUERY_LOOP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 
+// Load query presets functionality.
+require_once HM_QUERY_LOOP_PATH . 'inc/query-presets.php';
+
 /**
  * Initialize the plugin.
  */
@@ -46,6 +49,9 @@ function init() {
 
 	// Add contexts to query and post-template block.
 	add_filter( 'block_type_metadata', __NAMESPACE__ . '\\filter_block_metadata' );
+
+	// Initialize query presets functionality.
+	QueryPresets\init();
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
