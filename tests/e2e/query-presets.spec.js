@@ -24,17 +24,11 @@ test.describe( 'Query Presets', () => {
 		const presetLabel = page.locator( 'label:has-text("Query Preset")' );
 		await expect( presetLabel ).toBeVisible( { timeout: 5000 } );
 
-		// Check that the dropdown contains our test presets
-		const presetSelect = page.locator(
-			'.components-select-control__input:near(label:has-text("Query Preset"))'
-		);
-		await expect( presetSelect ).toBeVisible( { timeout: 5000 } );
-
 		// Open the dropdown and verify options
-		const selectElement = page
-			.locator( 'label:has-text("Query Preset")' )
-			.locator( '..' )
-			.locator( 'select' );
+		const selectElement = page.getByRole( 'combobox', {
+			name: 'Query Preset',
+		} );
+		await expect( selectElement ).toBeVisible( { timeout: 5000 } );
 
 		const options = await selectElement
 			.locator( 'option' )
@@ -84,10 +78,9 @@ test.describe( 'Query Presets', () => {
 		await blockEditor.queryBlock.openSettingsPanel();
 
 		// Select the "Alphabetical by Title" preset
-		const selectElement = page
-			.locator( 'label:has-text("Query Preset")' )
-			.locator( '..' )
-			.locator( 'select' );
+		const selectElement = page.getByRole( 'combobox', {
+			name: 'Query Preset',
+		} );
 
 		await selectElement.selectOption( 'alphabetical_title' );
 
@@ -139,10 +132,9 @@ test.describe( 'Query Presets', () => {
 		await blockEditor.queryBlock.openSettingsPanel();
 
 		// Select the "Alphabetical by Title (Z-A)" preset
-		const selectElement = page
-			.locator( 'label:has-text("Query Preset")' )
-			.locator( '..' )
-			.locator( 'select' );
+		const selectElement = page.getByRole( 'combobox', {
+			name: 'Query Preset',
+		} );
 
 		await selectElement.selectOption( 'alphabetical_title_desc' );
 
@@ -163,32 +155,27 @@ test.describe( 'Query Presets', () => {
 	test( 'should apply query preset on frontend', async ( {
 		page,
 		admin,
+		editor,
 		blockEditor,
 	} ) => {
-		// First, create a page with a Query Loop block that uses a preset
+		// Create a page with a Query Loop block that uses a preset
 		await admin.createNewPost( {
 			postType: 'page',
 			title: 'Preset Test Page',
 		} );
 
-		// Insert a Query Loop block
-		await page.click( 'button[aria-label="Toggle block inserter"]' );
-		await page.fill( 'input[placeholder="Search"]', 'Query Loop' );
-		await page.click( 'button.editor-block-list-item-query' );
-		await page.waitForTimeout( 1000 );
-
-		// Choose the standard query loop pattern
-		const chooseButton = page
-			.locator( 'button:has-text("Choose")' )
-			.first();
-		if (
-			await chooseButton
-				.isVisible( { timeout: 2000 } )
-				.catch( () => false )
-		) {
-			await chooseButton.click();
-			await page.waitForTimeout( 500 );
-		}
+		// Insert a Query Loop block with inner blocks to bypass the pattern chooser
+		await editor.insertBlock( {
+			name: 'core/query',
+			attributes: { query: { inherit: false, perPage: 5 } },
+			innerBlocks: [
+				{
+					name: 'core/post-template',
+					innerBlocks: [ { name: 'core/post-title' } ],
+				},
+			],
+		} );
+		await page.waitForTimeout( 500 );
 
 		// Select the query loop block
 		await blockEditor.selectBlock.byName( 'core/query' );
@@ -200,40 +187,27 @@ test.describe( 'Query Presets', () => {
 		await blockEditor.queryBlock.openSettingsPanel();
 
 		// Select the alphabetical preset
-		const selectElement = page
-			.locator( 'label:has-text("Query Preset")' )
-			.locator( '..' )
-			.locator( 'select' );
+		const selectElement = page.getByRole( 'combobox', {
+			name: 'Query Preset',
+		} );
+		await expect( selectElement ).toBeVisible( { timeout: 5000 } );
+		await selectElement.selectOption( 'alphabetical_title' );
+		await page.waitForTimeout( 1000 );
 
-		// Check if the preset dropdown is visible (presets are registered)
-		const isPresetVisible = await selectElement
-			.isVisible( { timeout: 3000 } )
-			.catch( () => false );
+		// Publish and visit the page
+		await blockEditor.publishAndVisit();
 
-		if ( isPresetVisible ) {
-			await selectElement.selectOption( 'alphabetical_title' );
-			await page.waitForTimeout( 1000 );
+		// Get the post titles on the frontend
+		const frontendTitles = await page
+			.locator( '.wp-block-post-template .wp-block-post-title' )
+			.allTextContents();
+		console.log( 'Frontend post titles:', frontendTitles );
 
-			// Publish and visit the page
-			await blockEditor.publishAndVisit();
-
-			// Get the post titles on the frontend
-			const frontendTitles = await page
-				.locator( '.wp-block-post-template .wp-block-post-title' )
-				.allTextContents();
-			console.log( 'Frontend post titles:', frontendTitles );
-
-			// Verify they are sorted alphabetically
-			if ( frontendTitles.length > 1 ) {
-				const sortedTitles = [ ...frontendTitles ].sort( ( a, b ) =>
-					a.localeCompare( b )
-				);
-				expect( frontendTitles ).toEqual( sortedTitles );
-			}
-		} else {
-			console.log(
-				'Preset dropdown not visible - test mu-plugin may not be loaded'
-			);
-		}
+		// Verify they are sorted alphabetically
+		expect( frontendTitles.length ).toBeGreaterThan( 1 );
+		const sortedTitles = [ ...frontendTitles ].sort( ( a, b ) =>
+			a.localeCompare( b )
+		);
+		expect( frontendTitles ).toEqual( sortedTitles );
 	} );
 } );
