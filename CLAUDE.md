@@ -62,9 +62,35 @@ The plugin handles two different query scenarios:
 ### Editor Preview Synchronization
 In src/index.js, a `useEffect` hook syncs the `hmQueryLoop.perPage` attribute to `query.perPage` to reflect the override in the editor preview. The `withPostTemplateStyles` filter adds inline CSS to hide excess posts in the editor beyond the `perPage` limit.
 
+### Query Presets System
+
+The plugin provides a PHP API for registering custom query presets that can be selected in the block editor:
+
+**Registration API** (`inc/query-presets.php`):
+```php
+// Register a custom query preset
+\HM\QueryLoop\QueryPresets\register_query_preset(
+    'related_articles',           // Unique identifier
+    'Related Articles',           // Human-readable label
+    function( $query_vars, $context ) {
+        // $context includes: post_id, is_rest, block (perPage, page)
+        // Modify and return $query_vars
+        return $query_vars;
+    }
+);
+```
+
+**How it works**:
+1. Presets are registered via PHP callbacks that receive query args and context
+2. The preset selector appears in the block editor when presets are registered
+3. REST API hooks are automatically added for all public post types via `rest_{$post_type}_collection_params` and `rest_{$post_type}_query`
+4. Frontend queries are modified via `query_loop_block_query_vars` filter
+5. The selected preset is stored in `query.hmPreset` block attribute
+
 ## Key Files
 
 - `hm-query-loop.php` - Main plugin file with all PHP hooks and query modification logic
+- `inc/query-presets.php` - Query presets registration API and hooks
 - `src/index.js` - Block filters for adding inspector controls and editor preview behavior
 - `tests/e2e/posts-per-page.spec.js` - E2E tests for posts per page functionality
 - `tests/e2e/fixtures.js` - Playwright test fixtures for WordPress admin
