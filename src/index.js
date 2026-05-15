@@ -3,21 +3,29 @@
  */
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { useSelect } from '@wordpress/data';
-import { InspectorControls } from '@wordpress/block-editor';
+import {
+	useSelect,
+	useDispatch,
+	select as syncSelect,
+	register,
+	createReduxStore,
+} from '@wordpress/data';
+import { InspectorControls, BlockControls } from '@wordpress/block-editor';
 import {
 	PanelBody,
 	ToggleControl,
 	TextControl,
 	SelectControl,
+	ToolbarGroup,
+	ToolbarButton,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 import {
 	createContext,
 	useContext,
 	useEffect,
-	useMemo,
 	useState,
+	useCallback,
 } from '@wordpress/element';
 import ServerSideRender from '@wordpress/server-side-render';
 import { registerBlockType, serialize } from '@wordpress/blocks';
@@ -48,6 +56,36 @@ registerBlockType( 'hm-query-loop/preview', {
 	edit: () => null,
 	save: () => null,
 } );
+
+/**
+ * Per-clientId Preview/Edit mode store.
+ * Mode resets on page reload (intentional — like collapsed-panel state).
+ */
+const PREVIEW_MODE_STORE = 'hm-query-loop/preview-mode';
+
+register(
+	createReduxStore( PREVIEW_MODE_STORE, {
+		reducer( state = { modes: {} }, action ) {
+			if ( action.type === 'SET_MODE' ) {
+				return {
+					modes: { ...state.modes, [ action.clientId ]: action.mode },
+				};
+			}
+			return state;
+		},
+		actions: {
+			setMode: ( clientId, mode ) => ( {
+				type: 'SET_MODE',
+				clientId,
+				mode,
+			} ),
+		},
+		selectors: {
+			getMode: ( state, clientId ) =>
+				state.modes[ clientId ] || 'edit',
+		},
+	} )
+);
 
 /**
  * Create a context for tracking used post IDs within a query loop in the editor.
@@ -562,15 +600,16 @@ addFilter(
 );
 
 /**
- * Replace the Query Loop block content with a server-side rendered preview
- * when the block has not yet been selected. This avoids the many API requests
- * that inner blocks make to load content, which is costly on pages with lots
- * of query loops. Once the user clicks on the block it switches to the full
- * editor and stays live from that point on.
+ * Add a Preview/Edit toolbar toggle to each Query Loop block.
+ *
+ * In Preview mode, the block renders a server-side HTML snapshot. The snapshot
+ * is taken once on entry into preview mode (keyed on the mode transition), so
+ * typing elsewhere in the editor never triggers additional renderer requests.
+ *
+ * In Edit mode the standard live editor is shown with all settings accessible.
  *
  * The rendered HTML has the inert attribute on its top-level elements
- * (added server-side) to prevent link navigation without wrapping in a
- * Disabled component that changes the DOM structure.
+ * (added server-side) to prevent link navigation.
  */
 const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -580,36 +619,12 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 			return <BlockEdit { ...props } />;
 		}
 
-		const [ isActivated, setIsActivated ] = useState( false );
-
-		const isSelected = useSelect(
-			( select ) => {
-				const { isBlockSelected, hasSelectedInnerBlock } =
-					select( 'core/block-editor' );
-				return (
-					isBlockSelected( clientId ) ||
-					hasSelectedInnerBlock( clientId, true )
-				);
-			},
+		const mode = useSelect(
+			( select ) => select( PREVIEW_MODE_STORE ).getMode( clientId ),
 			[ clientId ]
 		);
 
-		// Once selected, stay in edit mode permanently.
-		useEffect( () => {
-			if ( isSelected && ! isActivated ) {
-				setIsActivated( true );
-			}
-		}, [ isSelected, isActivated ] );
-
-		const block = useSelect(
-			( select ) => {
-				if ( isActivated ) {
-					return null;
-				}
-				return select( 'core/block-editor' ).getBlock( clientId );
-			},
-			[ clientId, isActivated ]
-		);
+		const { setMode } = useDispatch( PREVIEW_MODE_STORE );
 
 		const postId = useSelect( ( select ) => {
 			try {
@@ -620,26 +635,57 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 			}
 		}, [] );
 
-		const serializedContent = useMemo( () => {
-			if ( ! block ) {
-				return '';
+		// Stable snapshot of serialized block content for the SSR component.
+		// Only re-taken when transitioning into preview mode — never on arbitrary
+		// store changes — so there is no refetch storm while the user types elsewhere.
+		const [ snapshot, setSnapshot ] = useState( '' );
+
+		useEffect( () => {
+			if ( mode === 'preview' ) {
+				const block =
+					syncSelect( 'core/block-editor' ).getBlock( clientId );
+				if ( block ) {
+					setSnapshot( serialize( [ block ] ) );
+				}
 			}
-			return serialize( [ block ] );
-		}, [ block ] );
+		}, [ mode, clientId ] );
 
-		if ( isActivated ) {
-			return <BlockEdit { ...props } />;
-		}
+		const toggleMode = useCallback( () => {
+			setMode( clientId, mode === 'edit' ? 'preview' : 'edit' );
+		}, [ mode, clientId, setMode ] );
 
+		const isPreview = mode === 'preview';
 		const urlQueryArgs = postId ? { post_id: postId } : {};
 
 		return (
-			<ServerSideRender
-				block="hm-query-loop/preview"
-				attributes={ { content: serializedContent } }
-				httpMethod="POST"
-				urlQueryArgs={ urlQueryArgs }
-			/>
+			<>
+				<BlockControls>
+					<ToolbarGroup>
+						<ToolbarButton
+							icon={ isPreview ? 'edit' : 'visibility' }
+							label={
+								isPreview
+									? __( 'Edit query loop', 'hm-query-loop' )
+									: __(
+											'Preview query loop',
+											'hm-query-loop'
+									  )
+							}
+							onClick={ toggleMode }
+						/>
+					</ToolbarGroup>
+				</BlockControls>
+				{ isPreview ? (
+					<ServerSideRender
+						block="hm-query-loop/preview"
+						attributes={ { content: snapshot } }
+						httpMethod="POST"
+						urlQueryArgs={ urlQueryArgs }
+					/>
+				) : (
+					<BlockEdit { ...props } />
+				) }
+			</>
 		);
 	};
 }, 'withSSRPreview' );
