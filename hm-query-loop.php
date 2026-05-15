@@ -27,6 +27,9 @@ define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 // Load query presets functionality.
 require_once HM_QUERY_LOOP_PATH . 'inc/query-presets.php';
 
+// Load preload paths functionality.
+require_once HM_QUERY_LOOP_PATH . 'inc/preload-paths.php';
+
 /**
  * Initialize the plugin.
  */
@@ -52,6 +55,9 @@ function init() {
 
 	// Initialize query presets functionality.
 	QueryPresets\init();
+
+	// Register REST preload paths for query loop blocks.
+	PreloadPaths\register();
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
