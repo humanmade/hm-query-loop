@@ -72,12 +72,13 @@ function enqueue_block_editor_assets() {
 		]
 	);
 
-	// Pass the posts_per_page setting to JavaScript
+	// Pass settings to JavaScript.
 	wp_localize_script(
 		'hm-query-loop-editor',
 		'hmQueryLoopSettings',
 		[
-			'postsPerPage' => (int) get_option( 'posts_per_page', 10 ),
+			'postsPerPage'          => (int) get_option( 'posts_per_page', 10 ),
+			'elasticPressAvailable' => function_exists( 'ep_is_activated' ) && ep_is_activated(),
 		]
 	);
 
@@ -470,6 +471,11 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	// Apply custom posts per page if set and is a valid number.
 	if ( isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
 		$query['posts_per_page'] = (int) $settings['perPage'];
+	}
+
+	// Route query through ElasticPress if enabled and available.
+	if ( ! empty( $settings['useElasticPress'] ) && function_exists( 'ep_is_activated' ) && ep_is_activated() ) {
+		$query['ep_integrate'] = true;
 	}
 
 	// Exclude already displayed posts if enabled.
