@@ -57,6 +57,19 @@ function init() {
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
 
 /**
+ * Whether ElasticPress is available for use with query loops.
+ *
+ * Filterable so sites can force the integration on or off independently of
+ * whether ElasticPress is installed and activated.
+ *
+ * @return bool
+ */
+function is_elasticpress_available(): bool {
+	$available = function_exists( 'ep_is_activated' ) && ep_is_activated();
+	return (bool) apply_filters( 'hm_query_loop_elasticpress_available', $available );
+}
+
+/**
  * Enqueue block editor assets.
  */
 function enqueue_block_editor_assets() {
@@ -78,7 +91,7 @@ function enqueue_block_editor_assets() {
 		'hmQueryLoopSettings',
 		[
 			'postsPerPage'          => (int) get_option( 'posts_per_page', 10 ),
-			'elasticPressAvailable' => function_exists( 'ep_is_activated' ) && ep_is_activated(),
+			'elasticPressAvailable' => is_elasticpress_available(),
 		]
 	);
 
@@ -474,7 +487,7 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	}
 
 	// Route query through ElasticPress if enabled and available.
-	if ( ! empty( $settings['useElasticPress'] ) && function_exists( 'ep_is_activated' ) && ep_is_activated() ) {
+	if ( ! empty( $settings['useElasticPress'] ) && is_elasticpress_available() ) {
 		$query['ep_integrate'] = true;
 	}
 
