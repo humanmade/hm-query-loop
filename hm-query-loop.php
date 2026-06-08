@@ -65,7 +65,7 @@ add_action( 'init', __NAMESPACE__ . '\\init', 9 );
  * @return bool
  */
 function is_elasticpress_available(): bool {
-	$available = function_exists( 'ep_is_activated' ) && ep_is_activated();
+	$available = class_exists( '\ElasticPress\Features' );
 	return (bool) apply_filters( 'hm_query_loop_elasticpress_available', $available );
 }
 
