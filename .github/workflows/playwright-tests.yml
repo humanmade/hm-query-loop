@@ -24,35 +24,17 @@ jobs:
                   node-version: 24
                   cache: 'npm'
 
-            - name: Disable unattended upgrades
-              run: |
-                  sudo systemctl stop unattended-upgrades apt-daily.service apt-daily-upgrade.service || true
-                  sudo systemctl disable unattended-upgrades apt-daily.service apt-daily-upgrade.service || true
-                  sudo apt-get -y purge unattended-upgrades || true
-
             - name: Install dependencies
               run: npm i
 
             - name: Build plugin
               run: npm run build
 
-            - name: Get Playwright version
-              id: playwright-version
-              run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> $GITHUB_OUTPUT
-
-            - name: Cache Playwright browsers
-              uses: actions/cache@v4
-              id: playwright-cache
-              with:
-                  path: ~/.cache/ms-playwright
-                  key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-            - name: Install Playwright browsers
-              if: steps.playwright-cache.outputs.cache-hit != 'true'
+            - name: Install Playwright Browsers
               run: npx playwright install --with-deps chromium
 
             - name: Start WordPress environment
-              run: npm run wp-env start -- --debug
+              run: npm run wp-env start
 
             - name: Wait for WordPress to be ready
               run: |
