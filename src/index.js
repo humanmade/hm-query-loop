@@ -14,6 +14,8 @@ import {
 import { __ } from '@wordpress/i18n';
 import { createContext, useContext, useEffect } from '@wordpress/element';
 
+alert( 'test' );
+
 /**
  * Styles
  */
