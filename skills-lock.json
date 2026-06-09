@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "wp-playwright": {
+      "source": "git@github.com:humanmade/ai-skills.git",
+      "sourceType": "git",
+      "skillPath": "skills/wp-playwright/SKILL.md",
+      "computedHash": "d9b0cc7276c6ac025918bf5ba087a4b797d05cd07adb2c41b4b8309c4f9a9882"
+    }
+  }
+}

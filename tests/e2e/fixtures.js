@@ -3,8 +3,6 @@ const {
 	test: base,
 	expect,
 } = require( '@wordpress/e2e-test-utils-playwright' );
-const { Locator } = require( '@playwright/test' );
-const { execSync } = require( 'child_process' );
 
 /**
  * Extended test fixtures with additional utilities.
@@ -113,7 +111,7 @@ export const test = base.extend( {
 
 			/**
 			 * Get the Posts per page input control.
-			 * @return {Locator} The input element locator.
+			 * @return {import('@playwright/test').Locator} The input element locator.
 			 */
 			getPostsPerPageInput() {
 				return page
@@ -245,32 +243,3 @@ export const test = base.extend( {
 } );
 
 export { expect };
-
-/**
- * Helper to run WP-CLI commands.
- * @param command
- */
-export function wpCli( command ) {
-	try {
-		const result = execSync(
-			`npm run wp-env run tests-cli -- ${ command }`,
-			{
-				encoding: 'utf-8',
-				stdio: 'pipe',
-			}
-		);
-		return String( result.split( '\n' ).slice( -1 ) );
-	} catch ( error ) {
-		console.error( `WP-CLI command failed: ${ command }` );
-		console.error( error.stdout || error.message );
-		throw error;
-	}
-}
-
-export function resetDatabase() {
-	console.log( `Importing database fixture` );
-	wpCli(
-		`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`
-	);
-	wpCli( `wp cache flush` );
-}

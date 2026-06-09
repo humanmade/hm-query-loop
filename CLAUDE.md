@@ -16,11 +16,10 @@ HM Query Loop is a WordPress plugin that extends the core Query Loop block with 
 - `npm run format` - Format all files
 
 ### Testing
-- `npm run wp-env start` - Start WordPress test environment (ports 8888 dev, 8889 tests)
-- `npm run test:e2e` - Run Playwright end-to-end tests
+- `npm run test:e2e` - Run Playwright end-to-end tests (Playground starts and stops automatically)
 - `npm run test:e2e:debug` - Run tests in debug mode
-- `npm run test:e2e:watch` - Run tests in watch mode (reruns on changes)
-- `npm run wp-env stop` - Stop WordPress environment
+- `npm run test:e2e:watch` - Run tests in watch mode with UI
+- `npm run playground:start` - Start Playground for manual testing at localhost (auto-detects port)
 
 **Important**: Always run `npm run build` before running tests, as tests run against built assets.
 
@@ -114,7 +113,7 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 ## Testing Environment
 
-Tests use `@wordpress/env` with WordPress 6.9, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+Tests use WordPress Playground via `@wp-playground/cli`, configured in `blueprint.json`. The environment includes TwentyTwentyFive theme, the Advanced Query Loop plugin, and 25 seeded test posts. Playground starts automatically when running tests (port derived from cwd hash, default ~9400) and shuts down via `global-teardown.js`. Uses Playwright with `@wordpress/e2e-test-utils-playwright`.
 
 ## Important Implementation Notes
 
