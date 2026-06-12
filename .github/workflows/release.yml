@@ -1,88 +1,107 @@
-name: Version and Release
+name: Release
+
+# Builds the plugin, stamps the version into the source, then creates an
+# immutable tag that already points at the built, versioned code.
+#
+# The tag is created exactly once and is never moved or force-pushed, so
+# Packagist (which requires tags to be immutable) accepts it without conflict.
+#
+# Trigger this manually from the Actions tab and supply the version to cut.
 
 on:
-    release:
-        types: [created]
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Version to release, without a leading "v" (e.g. 1.2.3)'
+                required: true
+                type: string
+
+concurrency:
+    group: release-${{ github.event.inputs.version }}
+    cancel-in-progress: false
 
 jobs:
-    version-and-release:
-        name: Update Version and Create Release Asset
+    release:
+        name: Build, tag and publish
         runs-on: ubuntu-latest
         permissions:
             contents: write
-
         steps:
-            - name: Checkout code at tag
-              uses: actions/checkout@v4
+            - name: Validate version input
+              run: |
+                  VERSION="${{ github.event.inputs.version }}"
+                  if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                      echo "::error::Version must be in X.Y.Z format without a leading 'v'. Got: '$VERSION'"
+                      exit 1
+                  fi
+                  echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+                  echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+            - name: Check out source
+              uses: actions/checkout@v5
               with:
-                  ref: ${{ github.event.release.tag_name }}
+                  ref: main
                   fetch-depth: 0
 
-            - name: Get version from tag
-              id: get_version
+            - name: Ensure the tag does not already exist
               run: |
-                  # Extract version from tag (remove 'v' prefix if present)
-                  TAG_NAME="${{ github.event.release.tag_name }}"
-                  VERSION="${TAG_NAME#v}"
+                  if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+                      echo "::error::Tag ${TAG} already exists. Tags are immutable — bump the version and try again."
+                      exit 1
+                  fi
 
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-                  echo "Version: $VERSION"
-                  echo "Tag: $TAG_NAME"
-
-            - name: Replace __VERSION__ in plugin file
-              run: |
-                  sed -i "s/__VERSION__/${{ steps.get_version.outputs.version }}/g" hm-query-loop.php
-                  echo "Updated plugin header:"
-                  cat hm-query-loop.php | grep "Version:"
-                  echo "Updated version constant:"
-                  cat hm-query-loop.php | grep "HM_QUERY_LOOP_VERSION"
-
-            - name: Commit version changes to tag
-              run: |
-                  git config --local user.email "github-actions[bot]@users.noreply.github.com"
-                  git config --local user.name "github-actions[bot]"
-
-                  # Add and commit the versioned file
-                  git add hm-query-loop.php
-                  git commit -m "Update version to ${{ steps.get_version.outputs.version }}"
-
-                  # Delete the old tag and create a new one pointing to the new commit
-                  git tag -d "${{ steps.get_version.outputs.tag }}"
-                  git tag -a "${{ steps.get_version.outputs.tag }}" -m "Release ${{ steps.get_version.outputs.tag }}"
-
-                  # Force push the updated tag
-                  git push origin "${{ steps.get_version.outputs.tag }}" --force
-
-            - name: Create ZIP archive
-              run: |
-                  mkdir -p release
-
-                  # Create a clean copy excluding dev files
-                  rsync -av --exclude='.git' \
-                            --exclude='.github' \
-                            --exclude='node_modules' \
-                            --exclude='src' \
-                            --exclude='release' \
-                            --exclude='.gitignore' \
-                            --exclude='.gitattributes' \
-                            --exclude='package.json' \
-                            --exclude='package-lock.json' \
-                            --exclude='RELEASE.md' \
-                            ./ release/hm-query-loop/
-
-                  # Create ZIP
-                  cd release
-                  zip -r "hm-query-loop-${{ steps.get_version.outputs.tag }}.zip" hm-query-loop/
-                  cd ..
-
-                  echo "Created: release/hm-query-loop-${{ steps.get_version.outputs.tag }}.zip"
-
-            - name: Upload ZIP to release
-              uses: softprops/action-gh-release@v1
+            - name: Set up Node
+              uses: actions/setup-node@v4
               with:
-                  tag_name: ${{ github.event.release.tag_name }}
-                  files: |
-                      release/hm-query-loop-${{ steps.get_version.outputs.tag }}.zip
+                  node-version: 24
+                  cache: 'npm'
+
+            - name: Install dependencies and build
+              run: |
+                  npm ci
+                  npm run build
+
+            - name: Stamp version into the plugin
+              run: |
+                  sed -i "s/__VERSION__/${VERSION}/g" hm-query-loop.php
+                  echo "Stamped plugin header / constant:"
+                  grep -n "Version:\|HM_QUERY_LOOP_VERSION" hm-query-loop.php
+
+            - name: Create the immutable release commit and tag
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+
+                  # build/ is gitignored in source; force-add the compiled assets
+                  # so the tagged tree is self-contained and ready to install.
+                  git add -f build
+                  git add hm-query-loop.php
+                  git commit -m "Release ${TAG}"
+
+                  git tag -a "${TAG}" -m "Release ${TAG}"
+
+                  # Push ONLY the tag (and the objects it reaches). It is created
+                  # once and never force-pushed, satisfying Packagist's immutability.
+                  git push origin "refs/tags/${TAG}"
+
+            - name: Build distribution ZIP
+              run: |
+                  mkdir -p dist
+                  # git archive honours the export-ignore rules in .gitattributes,
+                  # so the ZIP contents are defined in exactly one place and are
+                  # guaranteed to match the tagged tree (build/ included).
+                  git archive --format=zip \
+                      --prefix=hm-query-loop/ \
+                      -o "dist/hm-query-loop-${TAG}.zip" \
+                      "${TAG}"
+                  echo "Created dist/hm-query-loop-${TAG}.zip"
+
+            - name: Publish GitHub release
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ env.TAG }}
+                  name: ${{ env.TAG }}
+                  generate_release_notes: true
+                  files: dist/hm-query-loop-${{ env.TAG }}.zip
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
