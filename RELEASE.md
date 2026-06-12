@@ -4,136 +4,119 @@ This document describes the automated release process for the HM Query Loop plug
 
 ## Overview
 
-The plugin uses GitHub Actions to automate versioning when you manually create a release. When you create a release in the GitHub UI, the workflow will:
+Releases are cut by the **`Release`** GitHub Actions workflow
+(`.github/workflows/release.yml`), triggered manually from the Actions tab.
 
-1. Checkout the code at the tag you created
-2. Replace `__VERSION__` placeholders with the actual version
-3. Commit the versioned file back to the tag
-4. Create a production-ready ZIP file (excluding dev files)
-5. Upload the ZIP as a release asset
+The workflow does everything *before* the tag exists, then creates the tag
+once and never touches it again:
 
-## Prerequisites
+1. Validates the version you supplied (must be `X.Y.Z`).
+2. Builds the production assets (`npm ci && npm run build`).
+3. Stamps the version into `hm-query-loop.php` (replaces `__VERSION__`).
+4. Commits the built assets + stamped version and **creates an annotated tag
+   `vX.Y.Z` pointing at that commit**.
+5. Pushes the tag — once, never force-pushed.
+6. Builds the distribution ZIP with `git archive` and publishes a GitHub
+   release with auto-generated notes.
 
-Before creating a release, the `release` branch should already have:
-- All code changes merged from `main`
-- Built assets in the `build/` directory (from the build workflow)
-- Passing tests
+Because the tag is created already-built and already-versioned, it is
+**immutable**. This is what Packagist requires: Packagist rejects tag updates,
+so the tag must never be moved after it is first published.
 
-## Creating a Release
+## Why it works this way
 
-### Step 1: Prepare the Release Branch
+The previous process created the GitHub release (and tag) first, then tried to
+*rewrite* the tag to stamp the version and add built assets via a force-push.
+Packagist had already ingested the original tag and refused the update, because
+tags are expected to be immutable. Building before tagging removes the need to
+ever move a tag.
 
-Make sure the `release` branch is up to date with built assets:
+## Creating a release
 
-```bash
-git checkout release
-git pull origin release
-```
+1. Make sure `main` is green and contains the code you want to ship.
+2. Go to **Actions → Release → Run workflow**.
+3. Enter the version **without** a leading `v` (e.g. `1.2.3`).
+4. Run it.
 
-The `release` branch should already contain built files in the `build/` directory from the build workflow.
+The workflow will fail fast if the tag already exists — tags are immutable, so
+bump the version instead of trying to re-release.
 
-### Step 2: Create a Release in GitHub UI
-
-1. Go to your GitHub repository
-2. Click on the "Releases" tab
-3. Click "Draft a new release"
-4. Fill in the release form:
-   - **Tag**: Create a new tag (e.g., `v1.2.3`)
-   - **Target**: Select the `release` branch
-   - **Title**: Release name (e.g., "v1.2.3")
-   - **Description**: Release notes (what's new, bug fixes, etc.)
-5. Click "Publish release"
-
-**Important:** The tag must follow the format `vX.Y.Z` (e.g., `v1.2.3`)
-
-### Step 3: Monitor the Workflow
-
-1. After publishing, go to the "Actions" tab
-2. Watch the "Version and Release" workflow run
-3. The workflow will:
-   - Update the version in the plugin file
-   - Update the tag to point to the versioned commit
-   - Create and upload a ZIP file
-
-### Step 4: Verify the Release
-
-1. Go back to the "Releases" page
-2. Your release should now have a ZIP file attached
-3. Download and test the ZIP to ensure it works correctly
-
-## Version Numbering
+## Version numbering
 
 Follow [Semantic Versioning](https://semver.org/):
 
-- **Major version** (1.0.0 → 2.0.0): Breaking changes
-- **Minor version** (1.0.0 → 1.1.0): New features, backwards compatible
-- **Patch version** (1.0.0 → 1.0.1): Bug fixes, backwards compatible
+- **Major** (1.0.0 → 2.0.0): Breaking changes
+- **Minor** (1.0.0 → 1.1.0): New features, backwards compatible
+- **Patch** (1.0.0 → 1.0.1): Bug fixes, backwards compatible
 
-## What Gets Released
+The version on `main` is always the literal placeholder `__VERSION__`; the real
+number only ever exists inside a release tag. This keeps `main` free of version
+churn and guarantees the version in a tag matches the tag name.
 
-The GitHub Action creates a ZIP file containing:
+## What gets released
 
-- `hm-query-loop.php` (with version replaced)
-- `build/` directory (compiled assets)
-- Any other necessary plugin files
+The ZIP is produced with `git archive`, which honours the `export-ignore`
+rules in `.gitattributes`. That file is the **single source of truth** for what
+ships. Currently included:
 
-The following are **excluded** from releases:
-- `.git/` directory
-- `.github/` directory
-- `node_modules/`
-- `src/` (source files)
-- `package.json` and `package-lock.json`
-- Development documentation (`README.md`)
+- `hm-query-loop.php` (with the version stamped in)
+- `build/` (compiled assets)
+- `inc/`
+- `composer.json`
+
+Everything marked `export-ignore` in `.gitattributes` (dev tooling, sources,
+tests, docs) is excluded. To change what ships, edit `.gitattributes` — nothing
+in the workflow needs to change.
+
+## Packagist
+
+Packagist publishes new tags automatically (via the GitHub webhook /
+auto-update). Since every `vX.Y.Z` tag is immutable and self-contained, no
+manual intervention or tag rewriting is ever required. If a release was wrong,
+**publish a new patch version** rather than attempting to move a tag.
+
+## The rolling `release` branch (optional)
+
+`.github/workflows/build-and-release.yml` keeps a `release` branch in sync with
+`main` plus committed `build/` assets on every push to `main`. This is useful
+for installing the latest built code directly from a branch, but it is **not**
+part of cutting a tagged release — the `Release` workflow builds fresh from
+`main`. The `release` branch carries the `__VERSION__` placeholder and is not a
+versioned artifact.
 
 ## Troubleshooting
 
 ### "Tag already exists"
 
-If you need to recreate a release:
+This is by design — tags are immutable. Bump to the next version and run the
+workflow again.
 
-1. Delete the existing release in GitHub UI
-2. Delete the tag locally and remotely:
-   ```bash
-   git tag -d v1.2.3
-   git push origin :refs/tags/v1.2.3
-   ```
-3. Create a new release with the same or different version
+### Build fails
 
-### Workflow fails
+Check the workflow logs. The build runs `npm ci && npm run build`; make sure
+`main` builds cleanly and `package-lock.json` is committed.
 
-Check the workflow logs in the GitHub Actions tab. Common issues:
-- Missing `build/` directory on the release branch
-- Incorrect tag format (must be `vX.Y.Z`)
-- Permissions issues (workflow needs `contents: write`)
+### ZIP missing files / contains dev files
 
-### ZIP file not uploaded
+Adjust the `export-ignore` entries in `.gitattributes`. The ZIP is generated
+straight from the tagged tree via `git archive`, so it always matches what is
+in the tag.
 
-If the ZIP file isn't attached to the release:
-1. Check the workflow logs for errors
-2. Make sure the workflow completed successfully
-3. The ZIP file should be named `hm-query-loop-vX.Y.Z.zip`
+## Manual release (fallback)
 
-## Manual Release (Fallback)
+If you ever need to cut a release by hand:
 
-If the automated process fails, you can create a release manually:
+```bash
+# from a clean checkout of the commit you want to ship
+npm ci && npm run build
+sed -i "s/__VERSION__/1.2.3/g" hm-query-loop.php
+git add -f build hm-query-loop.php
+git commit -m "Release v1.2.3"
+git tag -a v1.2.3 -m "Release v1.2.3"
+git push origin refs/tags/v1.2.3          # push the tag ONCE; never force-push
 
-1. Checkout the tag: `git checkout v1.2.3`
-2. Replace `__VERSION__` in `hm-query-loop.php` with the actual version
-3. Make sure `build/` directory exists with compiled assets
-4. Create a ZIP file excluding dev files:
-   ```bash
-   zip -r hm-query-loop-v1.2.3.zip . \
-     -x "*.git*" \
-     -x "node_modules/*" \
-     -x "src/*" \
-     -x "package*.json"
-   ```
-5. Upload the ZIP to the GitHub release
+# package it
+git archive --format=zip --prefix=hm-query-loop/ -o hm-query-loop-v1.2.3.zip v1.2.3
+```
 
-## Notes
-
-- The `release` branch should be kept built with assets in `build/`
-- Tags are created manually through GitHub UI, not automatically
-- The workflow updates the tag to point to versioned code
-- You can create multiple releases from the same branch
-- The workflow requires `contents: write` permission to update tags
+Then attach the ZIP to a GitHub release created from the tag.
