@@ -31,15 +31,33 @@ jobs:
               run: npm run build
 
             - name: Install Playwright Browsers
+              timeout-minutes: 5
               run: npx playwright install --with-deps chromium
 
-            - name: Start WordPress environment
+            - name: Cache Docker images
+              id: docker-cache
+              uses: actions/cache@v4
+              with:
+                  path: /tmp/docker-images
+                  key: docker-wp-env-${{ hashFiles('.wp-env.json') }}
+
+            - name: Load Docker images
+              if: steps.docker-cache.outputs.cache-hit == 'true'
+              run: docker load < /tmp/docker-images/images.tar
+
+            - name: Start wp-env
               run: npm run wp-env start
 
             - name: Wait for WordPress to be ready
               run: |
                   timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
                   sleep 5
+
+            - name: Save Docker images
+              if: steps.docker-cache.outputs.cache-hit != 'true'
+              run: |
+                  mkdir -p /tmp/docker-images
+                  docker save $(docker image ls -q) -o /tmp/docker-images/images.tar
 
             - name: Debug - Check WordPress status
               run: |

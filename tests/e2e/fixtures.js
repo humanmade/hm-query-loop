@@ -1,15 +1,11 @@
 /* eslint-disable no-console, jsdoc/require-param-type */
-const {
-	test: base,
-	expect,
-} = require( '@wordpress/e2e-test-utils-playwright' );
-const { Locator } = require( '@playwright/test' );
+const { test: base, expect } = require( '@wordpress/e2e-test-utils-playwright' );
 const { execSync } = require( 'child_process' );
 
 /**
  * Extended test fixtures with additional utilities.
  */
-export const test = base.extend( {
+const test = base.extend( {
 	/**
 	 * Custom editor utilities extending the base Editor.
 	 * @param root0
@@ -244,13 +240,11 @@ export const test = base.extend( {
 	},
 } );
 
-export { expect };
-
 /**
  * Helper to run WP-CLI commands.
  * @param command
  */
-export function wpCli( command ) {
+function wpCli( command ) {
 	try {
 		const result = execSync(
 			`npm run wp-env run tests-cli -- ${ command }`,
@@ -267,10 +261,12 @@ export function wpCli( command ) {
 	}
 }
 
-export function resetDatabase() {
+function resetDatabase() {
 	console.log( `Importing database fixture` );
 	wpCli(
 		`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`
 	);
 	wpCli( `wp cache flush` );
 }
+
+module.exports = { test, expect, wpCli, resetDatabase };
