@@ -217,6 +217,24 @@ export const test = base.extend( {
 						}
 					}
 				},
+				async openCuratedPanel() {
+					const curatedPanel = page.locator(
+						'.components-panel__body-title:has-text("Curated Posts")'
+					);
+					if (
+						await curatedPanel
+							.isVisible( { timeout: 2000 } )
+							.catch( () => false )
+					) {
+						const isExpanded = await curatedPanel
+							.locator( 'button' )
+							.getAttribute( 'aria-expanded' );
+						if ( isExpanded !== 'true' ) {
+							await curatedPanel.locator( 'button' ).click();
+							await page.waitForTimeout( 300 );
+						}
+					}
+				},
 				async excludeDisplayed() {
 					const excludeDisplayedToggle = page
 						.locator(

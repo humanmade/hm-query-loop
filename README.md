@@ -37,6 +37,16 @@ Register custom query configurations in PHP that can be selected from a dropdown
 - Queries work in both the editor preview and on the frontend
 - Automatically hooks into all public post types via the REST API
 
+### 7. Curated Posts
+
+A "Curated Posts" inspector panel lets editors hand-pick and order the posts a Query Loop returns. Search is scoped to the block's current post type and writes to the core `query.include` attribute, with `query.orderBy = 'include'` so the editorial sequence is preserved on both the editor preview and the frontend.
+
+**Behavior:**
+- The list overrides whatever post set the block would otherwise return, including a selected `hmPreset` — useful for featuring specific items on a particular page while still defaulting to the preset elsewhere.
+- An empty list is a no-op: the block falls back to its normal query.
+- Search uses the post type's own REST collection endpoint (`/wp/v2/{rest_base}`), so any post type registered with `show_in_rest` is supported — there is no need to opt into `/wp/v2/search`.
+- Posts already in the curated list are filtered out of the search results so they cannot be added twice.
+
 ## Installation
 
 1. Upload the plugin to your `/wp-content/plugins/` directory

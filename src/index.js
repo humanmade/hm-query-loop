@@ -15,6 +15,11 @@ import { __ } from '@wordpress/i18n';
 import { createContext, useContext, useEffect } from '@wordpress/element';
 
 /**
+ * Internal dependencies
+ */
+import CuratedPostsControl from './curated-posts-control';
+
+/**
  * Styles
  */
 import './index.scss';
@@ -171,10 +176,22 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 			} ) ),
 		];
 
+		const onChangeQuery = ( nextQuery ) =>
+			setAttributes( { query: nextQuery } );
+
 		return (
 			<>
 				<BlockEdit { ...props } />
 				<InspectorControls>
+					<PanelBody
+						title={ __( 'Curated Posts', 'hm-query-loop' ) }
+						initialOpen={ false }
+					>
+						<CuratedPostsControl
+							query={ query }
+							onChangeQuery={ onChangeQuery }
+						/>
+					</PanelBody>
 					<PanelBody
 						title={ __(
 							'Extra Query Loop Settings',

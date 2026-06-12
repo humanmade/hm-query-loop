@@ -44,6 +44,10 @@ function init() {
 	// Hook query_loop_block_query_vars to modify the query.
 	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 2 );
 
+	// Honor curated post lists (query.include). Priority 20 runs after the
+	// query presets filter (priority 15) so curated lists override presets.
+	add_filter( 'query_loop_block_query_vars', __NAMESPACE__ . '\\honor_query_include', 20, 2 );
+
 	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
 
@@ -507,6 +511,41 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
+
+	return $query;
+}
+
+/**
+ * Translate the core/query block's `query.include` attribute into `post__in`.
+ *
+ * Core's build_query_vars_from_query_block() recognizes `exclude` but not
+ * `include`, so curated post lists set via the Curated Posts inspector
+ * control (or directly in pattern markup) need promotion to real WP_Query
+ * arguments. Order is preserved via `orderby = 'post__in'`.
+ *
+ * Hooked at priority 20 so it runs after the query presets filter — when an
+ * editor sets a curated list on a block that also has an `hmPreset`, the
+ * curated list wins.
+ *
+ * @param array     $query Query arguments to be passed to WP_Query.
+ * @param \WP_Block $block The child block whose render triggered this filter.
+ * @return array Modified query arguments.
+ */
+function honor_query_include( array $query, \WP_Block $block ): array {
+	$include = $block->context['query']['include'] ?? null;
+
+	if ( ! is_array( $include ) || empty( $include ) ) {
+		return $query;
+	}
+
+	$include = array_values( array_filter( array_map( 'intval', $include ) ) );
+
+	if ( empty( $include ) ) {
+		return $query;
+	}
+
+	$query['post__in'] = $include;
+	$query['orderby']  = 'post__in';
 
 	return $query;
 }
