@@ -1,43 +1,42 @@
 const { defineConfig, devices } = require( '@playwright/test' );
 
-const baseURL = process.env.WP_BASE_URL || 'http://localhost:8889';
-
 /**
+ * Playground is booted by global-setup.js, which writes the server URL to
+ * process.env.WP_BASE_URL. Set WP_BASE_URL directly to skip global-setup and
+ * use an externally-managed Playground (e.g. `npm run playground:start`).
+ *
  * @see https://playwright.dev/docs/test-configuration
  */
 module.exports = defineConfig( {
 	testDir: './tests/e2e',
-	/* Global setup to log in to WordPress */
-	globalSetup: require.resolve( './tests/e2e/global-setup.js' ),
-	/* Test timeout */
-	timeout: 60000,
+	globalSetup: require.resolve( './global-setup' ),
+	globalTeardown: require.resolve( './global-teardown' ),
+	/* Playground boot is slow — 120s gives headroom */
+	timeout: 120000,
 	/* Run tests in files in parallel */
 	fullyParallel: false,
 	/* Fail the build on CI if you accidentally left test.only in the source code. */
 	forbidOnly: !! process.env.CI,
 	/* Retry on CI only */
 	retries: process.env.CI ? 2 : 0,
-	/* Opt out of parallel tests on CI. */
-	workers: process.env.CI ? 3 : 1,
+	/* Single worker — Playground is a single shared instance */
+	workers: 1,
 	/* Reporter to use. See https://playwright.dev/docs/test-reporters */
 	reporter: [
 		[ 'list' ],
 		[ 'html', { open: process.env.CI ? 'never' : 'on-failure' } ],
 		[ 'json', { outputFile: 'test-results/results.json' } ],
 	],
-	/* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
 	use: {
-		baseURL,
+		baseURL: process.env.WP_BASE_URL,
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure',
 		video: 'retain-on-failure',
 		actionTimeout: 15000,
 		navigationTimeout: 30000,
-		// Use the saved authentication state
 		storageState: '.auth/wordpress.json',
 	},
 
-	/* Configure projects for major browsers */
 	projects: [
 		{
 			name: 'chromium',

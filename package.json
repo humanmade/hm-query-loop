@@ -13,16 +13,16 @@
 		"lint:css": "wp-scripts lint-style",
 		"lint:css:fix": "wp-scripts lint-style --fix",
 		"format": "wp-scripts format",
-		"wp-env": "wp-env",
-		"test:e2e": "wp-scripts test-playwright",
-		"test:e2e:debug": "wp-scripts test-playwright --debug",
-		"test:e2e:watch": "wp-scripts test-playwright --watch"
+		"playground:start": "npx @wp-playground/cli server --blueprint=blueprint.json --auto-mount",
+		"test:e2e": "playwright test",
+		"test:e2e:debug": "playwright test --debug",
+		"test:e2e:watch": "playwright test --ui"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.58.0",
 		"@types/node": "^24.10.1",
+		"@wp-playground/cli": "^1.0.0",
 		"@wordpress/e2e-test-utils-playwright": "^1.35.0",
-		"@wordpress/env": "^9.0.0",
 		"@wordpress/scripts": "^27.0.0"
 	}
 }
