@@ -170,20 +170,18 @@ This plugin uses GitHub Actions for automated versioning and release asset creat
 
 ### Creating a Release
 
-1. Make sure the `release` branch is built and ready (assets should be in the `build/` directory)
-2. Go to the GitHub repository and create a new release:
-   - Click "Releases" → "Draft a new release"
-   - Create a new tag (e.g., `v1.2.3`) from the `release` branch
-   - Add release title and notes
-   - Click "Publish release"
-3. The GitHub Action will automatically:
-   - Checkout the code at the tag you created
+1. Make sure the `release` branch is up to date (a push to `main` triggers the build workflow that keeps it current).
+2. Go to the GitHub repository → **Actions** → **Version and Release** → **Run workflow**.
+3. Enter the version number (e.g., `1.2.3` or `v1.2.3`) and click **Run workflow**.
+4. The workflow will:
    - Replace `__VERSION__` placeholders with the actual version number
-   - Commit the versioned file back to the tag
-   - Create a production-ready ZIP file (excluding dev files)
-   - Upload the ZIP as a release asset
+   - Commit the versioned file to the `release` branch
+   - Create and push the tag from that commit
+   - Create a GitHub Release with a production-ready ZIP (excluding dev files)
 
-The tag version (e.g., `v1.2.3`) will be used as the plugin version. The version number should follow semantic versioning.
+The tag version (e.g., `v1.2.3`) will be used as the plugin version. Follow semantic versioning.
+
+> **Note:** The tag is created *after* the version commit so it is never moved or force-pushed. This is required to keep Packagist consistent — Packagist blocks versions where the tag is re-pointed to a different commit.
 
 ## License
 

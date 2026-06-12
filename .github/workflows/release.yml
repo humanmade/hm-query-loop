@@ -1,8 +1,12 @@
 name: Version and Release
 
 on:
-    release:
-        types: [created]
+    workflow_dispatch:
+        inputs:
+            version:
+                description: 'Version to release (e.g., 1.2.3 or v1.2.3)'
+                required: true
+                type: string
 
 jobs:
     version-and-release:
@@ -12,77 +16,66 @@ jobs:
             contents: write
 
         steps:
-            - name: Checkout code at tag
+            - name: Checkout release branch
               uses: actions/checkout@v4
               with:
-                  ref: ${{ github.event.release.tag_name }}
+                  ref: release
                   fetch-depth: 0
 
-            - name: Get version from tag
+            - name: Normalise version
               id: get_version
               run: |
-                  # Extract version from tag (remove 'v' prefix if present)
-                  TAG_NAME="${{ github.event.release.tag_name }}"
-                  VERSION="${TAG_NAME#v}"
-
+                  INPUT="${{ inputs.version }}"
+                  VERSION="${INPUT#v}"
+                  TAG="v${VERSION}"
                   echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
-                  echo "Version: $VERSION"
-                  echo "Tag: $TAG_NAME"
+                  echo "tag=$TAG" >> $GITHUB_OUTPUT
 
             - name: Replace __VERSION__ in plugin file
               run: |
                   sed -i "s/__VERSION__/${{ steps.get_version.outputs.version }}/g" hm-query-loop.php
-                  echo "Updated plugin header:"
-                  cat hm-query-loop.php | grep "Version:"
-                  echo "Updated version constant:"
-                  cat hm-query-loop.php | grep "HM_QUERY_LOOP_VERSION"
+                  grep "Version:" hm-query-loop.php
+                  grep "HM_QUERY_LOOP_VERSION" hm-query-loop.php
 
-            - name: Commit version changes to tag
+            - name: Commit version and create tag
               run: |
                   git config --local user.email "github-actions[bot]@users.noreply.github.com"
                   git config --local user.name "github-actions[bot]"
 
-                  # Add and commit the versioned file
                   git add hm-query-loop.php
                   git commit -m "Update version to ${{ steps.get_version.outputs.version }}"
+                  git push origin release
 
-                  # Delete the old tag and create a new one pointing to the new commit
-                  git tag -d "${{ steps.get_version.outputs.tag }}"
+                  # Tag is created once, after the version commit — never force-pushed.
                   git tag -a "${{ steps.get_version.outputs.tag }}" -m "Release ${{ steps.get_version.outputs.tag }}"
-
-                  # Force push the updated tag
-                  git push origin "${{ steps.get_version.outputs.tag }}" --force
+                  git push origin "${{ steps.get_version.outputs.tag }}"
 
             - name: Create ZIP archive
               run: |
-                  mkdir -p release
+                  mkdir -p release-zip
 
-                  # Create a clean copy excluding dev files
                   rsync -av --exclude='.git' \
                             --exclude='.github' \
                             --exclude='node_modules' \
                             --exclude='src' \
-                            --exclude='release' \
+                            --exclude='release-zip' \
                             --exclude='.gitignore' \
                             --exclude='.gitattributes' \
                             --exclude='package.json' \
                             --exclude='package-lock.json' \
                             --exclude='RELEASE.md' \
-                            ./ release/hm-query-loop/
+                            ./ release-zip/hm-query-loop/
 
-                  # Create ZIP
-                  cd release
+                  cd release-zip
                   zip -r "hm-query-loop-${{ steps.get_version.outputs.tag }}.zip" hm-query-loop/
                   cd ..
 
-                  echo "Created: release/hm-query-loop-${{ steps.get_version.outputs.tag }}.zip"
-
-            - name: Upload ZIP to release
+            - name: Create GitHub Release
               uses: softprops/action-gh-release@v1
               with:
-                  tag_name: ${{ github.event.release.tag_name }}
+                  tag_name: ${{ steps.get_version.outputs.tag }}
+                  name: ${{ steps.get_version.outputs.tag }}
                   files: |
-                      release/hm-query-loop-${{ steps.get_version.outputs.tag }}.zip
+                      release-zip/hm-query-loop-${{ steps.get_version.outputs.tag }}.zip
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
