@@ -560,10 +560,11 @@ function render_preview_block( $attributes ) {
 
 	$html = do_blocks( $content );
 
-	$processor = new \WP_HTML_Tag_Processor( $html );
+	// WP_HTML_Processor::create_fragment() wraps the HTML in an implicit
+	// body context, so top-level elements are at depth 1, not 0.
+	$processor = \WP_HTML_Processor::create_fragment( $html );
 	while ( $processor->next_tag() ) {
-		// Only process top-level elements (depth 0).
-		if ( $processor->get_current_depth() === 0 ) {
+		if ( $processor->get_current_depth() === 1 ) {
 			$processor->set_attribute( 'inert', true );
 		}
 	}
