@@ -29,6 +29,11 @@ module.exports = defineConfig( {
 	],
 	use: {
 		baseURL: process.env.WP_BASE_URL,
+		// Tell the server not to compress responses. Playground's WASM PHP can
+		// set Content-Encoding: gzip without producing a valid gzip body, which
+		// causes ERR_CONTENT_DECODING_FAILED. Sending 'identity' prevents PHP's
+		// zlib output compression from activating entirely.
+		extraHTTPHeaders: { 'Accept-Encoding': 'identity' },
 		trace: 'on-first-retry',
 		screenshot: 'only-on-failure',
 		video: 'retain-on-failure',

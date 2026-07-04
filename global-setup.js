@@ -46,16 +46,23 @@ module.exports = async () => {
 		blueprint,
 	} );
 
-	process.env.WP_BASE_URL = cli.serverUrl;
+	// runCLI returns { playground, server } — derive URL from the server socket.
+	const addr = cli.server.address();
+	const serverUrl = `http://127.0.0.1:${ addr.port }`;
+
+	process.env.WP_BASE_URL = serverUrl;
 	globalThis.__wpPlayground = cli;
 
-	console.log( `Playground running at ${ cli.serverUrl }` );
+	console.log( `Playground running at ${ serverUrl }` );
 
 	// Log in and save authentication state for all tests.
 	const browser = await chromium.launch();
-	const page = await browser.newPage( { baseURL: cli.serverUrl } );
+	const page = await browser.newPage( {
+		baseURL: serverUrl,
+		extraHTTPHeaders: { 'Accept-Encoding': 'identity' },
+	} );
 
-	await page.goto( `${ cli.serverUrl }/wp-login.php` );
+	await page.goto( `${ serverUrl }/wp-login.php` );
 	await page.fill( '#user_login', 'admin' );
 	await page.fill( '#user_pass', 'password' );
 	await page.click( '#wp-submit' );
