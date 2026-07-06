@@ -658,22 +658,22 @@ const withSSRPreview = createHigherOrderComponent( ( BlockEdit ) => {
 		}, [] );
 
 		// Stable snapshot of serialized block content for the SSR component.
-		// Only re-taken when transitioning into preview mode — never on arbitrary
-		// store changes — so there is no refetch storm while the user types elsewhere.
+		// Captured in the toggle handler (not a useEffect) so that the first
+		// render in preview mode already has content — avoiding an empty
+		// initial POST to the block renderer endpoint.
 		const [ snapshot, setSnapshot ] = useState( '' );
 
-		useEffect( () => {
-			if ( mode === 'preview' ) {
+		const toggleMode = useCallback( () => {
+			if ( mode === 'edit' ) {
 				const block =
 					syncSelect( 'core/block-editor' ).getBlock( clientId );
 				if ( block ) {
 					setSnapshot( serialize( [ block ] ) );
 				}
+				setMode( clientId, 'preview' );
+			} else {
+				setMode( clientId, 'edit' );
 			}
-		}, [ mode, clientId ] );
-
-		const toggleMode = useCallback( () => {
-			setMode( clientId, mode === 'edit' ? 'preview' : 'edit' );
 		}, [ mode, clientId, setMode ] );
 
 		const isPreview = mode === 'preview';
