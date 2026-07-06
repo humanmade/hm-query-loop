@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-HM Query Loop is a WordPress plugin that extends the core Query Loop block with advanced controls for managing multiple query loops on a single page. It provides three main features: posts per page override for inherited queries, hide on paginated pages, and exclude already displayed posts.
+HM Query Loop is a WordPress plugin that extends the core Query Loop block with advanced controls for managing multiple query loops on a single page. Core features: posts per page override for inherited queries, hide on paginated pages, exclude already displayed posts, multiple post templates per query loop, query ID deduplication, and query presets.
 
 ## Development Commands
 
@@ -30,12 +30,14 @@ HM Query Loop is a WordPress plugin that extends the core Query Loop block with 
 The plugin uses WordPress block filters to extend the `core/query` block without creating a custom block variant. This allows it to work with any Query Loop block while preserving core functionality.
 
 ### Context System
-The plugin exposes a `hm-query-loop/settings` context object from `core/query` to `core/post-template`:
+The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/post-template`:
 ```js
+// context key: 'hmQueryLoop'
 {
   perPage: number | undefined,      // Custom posts per page value
   hideOnPaged: boolean,             // Whether to hide on paginated pages
-  excludeDisplayed: boolean         // Whether to exclude displayed posts
+  excludeDisplayed: boolean,        // Whether to exclude displayed posts
+  useElasticPress: boolean,         // Whether to route query through ElasticPress (only shown when EP is active)
 }
 ```
 
@@ -60,7 +62,18 @@ The plugin handles two different query scenarios:
 - Subsequent query loops with `excludeDisplayed` enabled filter out tracked IDs via `post__not_in`
 
 ### Editor Preview Synchronization
-In src/index.js, a `useEffect` hook syncs the `hmQueryLoop.perPage` attribute to `query.perPage` to reflect the override in the editor preview. The `withPostTemplateStyles` filter adds inline CSS to hide excess posts in the editor beyond the `perPage` limit.
+`withPostTemplateStyles` HOC injects an inline `<style>` tag that hides posts outside each post template's slice in the editor preview using `nth-of-type` selectors. It accounts for both query-level `perPage` (inherited queries) and post-template-level `perPage` (multiple post templates), plus an offset for preceding templates.
+
+### Multiple Post Templates
+A non-inherited Query Loop can contain multiple `core/post-template` blocks, each showing a different slice of the results:
+- `withPostTemplateInspectorControls` HOC adds "Posts per template" to each `core/post-template`'s inspector, clamped to remaining available posts.
+- `withQueryLoopContextProvider` HOC wraps `core/query` with a `UsedPostsContext.Provider` so sibling post-template blocks share their `perPage` values.
+- Server-side: `filter_query_loop_block_query_vars` computes `posts_per_page` and offset per template using `$query_loop_post_template_per_pages` (keyed by `queryId`).
+
+### Query ID Deduplication
+WordPress does not deduplicate `queryId` when blocks are copy-pasted, breaking post exclusion and pagination:
+- Server-side: `deduplicate_query_ids` (`pre_render_block`, priority 10) generates unique IDs using a static instance counter + post ID and propagates them to child `core/post-template` via a dynamic `render_block_context` filter.
+- Editor-side: `withUniqueQueryId` HOC computes the expected ID from post ID + block index and syncs it via `setAttributes`.
 
 ### Query Presets System
 
@@ -92,12 +105,16 @@ The plugin provides a PHP API for registering custom query presets that can be s
 - `hm-query-loop.php` - Main plugin file with all PHP hooks and query modification logic
 - `inc/query-presets.php` - Query presets registration API and hooks
 - `src/index.js` - Block filters for adding inspector controls and editor preview behavior
-- `tests/e2e/posts-per-page.spec.js` - E2E tests for posts per page functionality
 - `tests/e2e/fixtures.js` - Playwright test fixtures for WordPress admin
+- `tests/e2e/posts-per-page.spec.js` - E2E tests for posts per page functionality
+- `tests/e2e/query-presets.spec.js` - E2E tests for query presets
+- `tests/e2e/multiple-post-templates.spec.js` - E2E tests for multiple post templates
+- `tests/e2e/unique-query-id.spec.js` - E2E tests for query ID deduplication
+- `tests/e2e/exclude-with-post-in.spec.js` - E2E tests for exclusion with post__in queries
 
 ## Testing Environment
 
-Tests use `@wordpress/env` with WordPress 6.7.1, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+Tests use `@wordpress/env` with WordPress 6.9, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
 
 ## Important Implementation Notes
 

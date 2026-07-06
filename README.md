@@ -8,7 +8,7 @@ A WordPress plugin that extends the core Query Loop block with advanced controls
 
 When a Query Loop block is set to "Inherit query from template", you can now override the number of posts to display. This is useful when you want to show a different number of posts than the main query. Leave the field empty to use the default number of posts.
 
-**Editor Preview**: The posts per page override is now reflected in the editor preview, making it easier to see how your content will appear without needing to preview or publish the page.
+**Editor Preview**: The posts per page override is reflected in the editor preview, making it easier to see how your content will appear without needing to preview or publish the page.
 
 ### 2. Hide on Paginated Pages
 
@@ -20,7 +20,15 @@ Enable this option to automatically exclude posts that have been displayed by pr
 
 **Important:** The exclusion applies to all query loops rendered before the current one, regardless of whether they were visible (e.g., hidden due to pagination settings).
 
-### 4. Query Presets
+### 4. Multiple Post Templates
+
+A single Query Loop block (non-inherited) can contain multiple `core/post-template` blocks, each showing a different slice of the query results. Each Post Template block gets a "Posts per template" setting in its inspector controls to control how many posts it shows.
+
+### 5. Query ID Deduplication
+
+The plugin automatically assigns unique query IDs when blocks are copy-pasted or when a page renders the same template multiple times, preventing broken post exclusion and pagination.
+
+### 6. Query Presets
 
 Register custom query configurations in PHP that can be selected from a dropdown in the block editor. This allows developers to create reusable, dynamic queries (like "Related Articles" or "Trending Posts") that content editors can easily apply to any Query Loop block.
 
@@ -74,62 +82,30 @@ See [tests/e2e/README.md](tests/e2e/README.md) for more details on the test setu
 ## Usage
 
 1. Add a Query Loop block to your page or template
-2. In the block settings sidebar, find the "HM Query Loop Settings" panel
+2. In the block settings sidebar, find the "Extra Query Loop Settings" panel
 3. Configure the options as needed:
    - **Query Preset**: Select a predefined query configuration (only visible when presets are registered)
    - **Posts per page (Override)**: Only visible when inheriting query - enter a number to override posts per page, or leave empty to use default
    - **Hide on paginated pages**: Toggle to hide this block on page 2+
    - **Exclude already displayed posts**: Toggle to avoid showing duplicate posts
+4. For non-inherited queries with multiple Post Template blocks, select each `core/post-template` and set **Posts per template** to control how many posts each template shows
 
 ## Block Context
 
-The plugin exposes a single `hm-query-loop/settings` context object that can be accessed by child blocks (like `core/post-template`):
+The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/post-template`:
 
 ```js
+// context key: 'hmQueryLoop'
 {
 	perPage: number | undefined,      // Custom posts per page value
 	hideOnPaged: boolean,             // Whether to hide on paginated pages
-	excludeDisplayed: boolean          // Whether to exclude displayed posts
+	excludeDisplayed: boolean         // Whether to exclude displayed posts
 }
 ```
 
 This context is automatically registered for the `core/post-template` block both in JavaScript and PHP.
 
-## Technical Implementation
-
-The plugin uses a dual-approach to handle both inherited and non-inherited Query Loop blocks:
-
-### For Inherited Queries (uses main query):
-
-- **`pre_render_block`**: Runs before a Query Loop block renders
-  - Captures block attributes and stores them globally
-  - Checks pagination visibility settings (returns empty string if hidden)
-  - Hooks `modify_query_from_block_attrs` to `pre_get_posts`
-
-- **`pre_get_posts` (via `modify_query_from_block_attrs`)**: Dynamically hooked during block rendering
-  - Retrieves block attributes from global storage
-  - Modifies the query (posts per page, exclusions)
-  - Works with inherited queries and main query
-
-- **`render_block`**: Runs after the Query Loop block renders
-  - Unhooks `modify_query_from_block_attrs` from `pre_get_posts`
-  - Clears global block attributes
-
-### For Non-Inherited Queries (custom WP_Query):
-
-- **`query_loop_block_query_vars`**: Passes custom block attributes into WP_Query vars
-  - Adds `hm_query_loop_id`, `hm_query_loop_per_page`, `hm_query_loop_exclude_displayed`
-  - This filter runs for non-inherited queries only
-
-Note: Since `query_loop_block_query_vars` doesn't fire for inherited queries, we use the `pre_render_block`/`render_block` approach to hook/unhook `pre_get_posts` dynamically around the block rendering.
-
-### Post Tracking:
-
-- **`the_posts`**: Runs after posts are fetched
-  - Tracks post IDs from Query Loop blocks (both approaches) and main query
-  - Builds a global list for subsequent query loops to exclude
-
-### Query Presets:
+## Query Presets API
 
 Register custom query presets that appear in the block editor and modify queries on both frontend and REST API requests.
 
