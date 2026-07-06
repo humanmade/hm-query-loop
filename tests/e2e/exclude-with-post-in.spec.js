@@ -85,15 +85,21 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.getByRole( 'button', { name: 'Title & Date' } )
 			.click();
 
+		// Selecting the pattern leaves a child block focused; re-select the
+		// AQL root block so its sidebar settings (including the Posts
+		// combobox) are shown.
+		await blockEditor.selectBlock.byName( 'core/query', 0 );
 		// Check if we need to set this to a custom loop, WP 6.9 does not default to custom.
 		await blockEditor.queryBlock.setAsCustom();
 
-		// Set the posts to include
+		// Set the posts to include - AQL requires typing to search; no posts shown until input has text.
 		await page
-			.getByRole( 'combobox', { name: 'Posts', exact: true } )
+			.getByRole( 'combobox', { name: 'Posts to Include' } )
 			.click();
-		await page.getByRole( 'option', { name: 'Post 23' } ).click();
-		await page.getByRole( 'option', { name: 'Post 21' } ).click();
+		await page.keyboard.type( 'Post 23' );
+		await page.getByRole( 'option', { name: 'Post 23', exact: true } ).click();
+		await page.keyboard.type( 'Post 21' );
+		await page.getByRole( 'option', { name: 'Post 21', exact: true } ).click();
 
 		// Get post titles from first query
 		const canvas = page
@@ -266,18 +272,29 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 		}
 
 		await editor.openDocumentSettingsSidebar();
+		// Selecting the pattern leaves a child block focused; re-select the
+		// AQL root block so its sidebar settings (including the Posts
+		// combobox) are shown.
+		await blockEditor.selectBlock.byName( 'core/query', 0 );
 		await blockEditor.queryBlock.setAsCustom();
 
-		// Set the posts to include
+		// Set the posts to include - AQL requires typing to search; no posts shown until input has text.
 		await page
-			.getByRole( 'combobox', { name: 'Posts', exact: true } )
+			.getByRole( 'combobox', { name: 'Posts to Include' } )
 			.click();
-		await page.getByRole( 'option', { name: 'Post 23' } ).click();
-		await page.getByRole( 'option', { name: 'Post 21' } ).click();
-		await page.getByRole( 'option', { name: 'Post 19' } ).click();
-		await page.getByRole( 'option', { name: 'Post 18' } ).click();
-		await page.getByRole( 'option', { name: 'Post 16' } ).click();
-		await page.getByRole( 'option', { name: 'Post 24' } ).click();
+		for ( const postName of [
+			'Post 23',
+			'Post 21',
+			'Post 19',
+			'Post 18',
+			'Post 16',
+			'Post 24',
+		] ) {
+			await page.keyboard.type( postName );
+			await page
+				.getByRole( 'option', { name: postName, exact: true } )
+				.click();
+		}
 
 		// Select the first post template and configure it
 		await blockEditor.selectBlock.byName( 'core/post-template' );

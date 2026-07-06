@@ -220,10 +220,11 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		}
 
 		const { hmQueryLoop = {}, query = {} } = attributes;
-		const { perPage, hideOnPaged, excludeDisplayed } = hmQueryLoop;
+		const { perPage, hideOnPaged, excludeDisplayed, useElasticPress } = hmQueryLoop;
 
 		const isInheritQuery = query.inherit || false;
 		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
+		const elasticPressAvailable = window.hmQueryLoopSettings?.elasticPressAvailable ?? false;
 
 		// Get available presets from PHP.
 		const availablePresets = window.hmQueryLoopPresets?.presets || [];
@@ -342,6 +343,27 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 								} )
 							}
 						/>
+						{ elasticPressAvailable && (
+							<ToggleControl
+								label={ __(
+									'Use ElasticSearch',
+									'hm-query-loop'
+								) }
+								help={ __(
+									'Route this query through ElasticPress for improved performance.',
+									'hm-query-loop'
+								) }
+								checked={ !! useElasticPress }
+								onChange={ ( value ) =>
+									setAttributes( {
+										hmQueryLoop: {
+											...hmQueryLoop,
+											useElasticPress: value,
+										},
+									} )
+								}
+							/>
+						) }
 					</PanelBody>
 				</InspectorControls>
 			</>
