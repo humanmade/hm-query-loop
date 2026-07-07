@@ -118,8 +118,6 @@ test.describe( 'Unique Query IDs', () => {
 			} );
 		} );
 
-		console.log( 'Query IDs in editor:', queryIds );
-
 		// Verify we have 3 query loops
 		expect( queryIds ).toHaveLength( 3 );
 
@@ -131,8 +129,133 @@ test.describe( 'Unique Query IDs', () => {
 
 		// Verify all queryIds are unique
 		const uniqueIds = [ ...new Set( queryIds ) ];
-		console.log( 'Unique query IDs:', uniqueIds );
 		expect( uniqueIds ).toHaveLength( 3 );
+	} );
+
+	test( 'should not mark post as dirty when editor reloads with already-unique queryIds', async ( {
+		page,
+		admin,
+	} ) => {
+		// Create a new page with a Query Loop block
+		await admin.createNewPost( { postType: 'page' } );
+		await page.waitForTimeout( 1500 );
+
+		const closeButton = page.getByRole( 'button', { name: 'Close' } );
+		if (
+			await closeButton
+				.isVisible( { timeout: 1000 } )
+				.catch( () => false )
+		) {
+			await closeButton.click();
+		}
+
+		const canvas = page
+			.locator( 'iframe[name="editor-canvas"]' )
+			.contentFrame();
+
+		await canvas.getByRole( 'textbox', { name: 'Add title' } ).click();
+		await canvas
+			.getByRole( 'textbox', { name: 'Add title' } )
+			.fill( 'Test no dirty on load' );
+
+		await canvas
+			.getByRole( 'button', { name: 'Add default block' } )
+			.click();
+		await canvas
+			.getByRole( 'document', {
+				name: 'Empty block; start writing or',
+			} )
+			.fill( '/query' );
+		await page
+			.getByRole( 'option', { name: 'Query Loop' } )
+			.first()
+			.click();
+		await page.waitForTimeout( 1000 );
+
+		const startBlankButton = canvas.getByRole( 'button', {
+			name: 'Start blank',
+		} );
+		if (
+			await startBlankButton
+				.isVisible( { timeout: 2000 } )
+				.catch( () => false )
+		) {
+			await startBlankButton.click();
+			await page.waitForTimeout( 500 );
+		}
+
+		const patternButton = canvas.getByRole( 'button', {
+			name: 'Title & Date',
+		} );
+		if (
+			await patternButton
+				.isVisible( { timeout: 2000 } )
+				.catch( () => false )
+		) {
+			await patternButton.click();
+			await page.waitForTimeout( 500 );
+		}
+
+		// Give the HOC time to assign a queryId
+		await page.waitForTimeout( 1000 );
+
+		const initialQueryId = await page.evaluate( () => {
+			const blocks = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlocksByName( 'core/query' );
+			const block = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlock( blocks[ 0 ] );
+			return block.attributes.queryId;
+		} );
+
+		expect( typeof initialQueryId ).toBe( 'number' );
+
+		// Publish the page
+		await page
+			.getByRole( 'button', { name: 'Publish', exact: true } )
+			.click();
+		await page
+			.getByLabel( 'Editor publish' )
+			.getByRole( 'button', { name: 'Publish', exact: true } )
+			.click();
+		await page.waitForTimeout( 1500 );
+
+		const postId = await page.evaluate( () => {
+			return window.wp.data.select( 'core/editor' ).getCurrentPostId();
+		} );
+
+		// Reopen the editor — this is the scenario where the false dirty
+		// warning appeared before the fix: the HOC was rewriting the
+		// queryId on every load, marking the post as changed immediately.
+		await admin.visitAdminPage( `post.php?post=${ postId }&action=edit` );
+		await page.waitForSelector( 'iframe[name="editor-canvas"]', {
+			timeout: 15000,
+		} );
+		// Wait for Gutenberg to fully initialise and for all useEffect
+		// callbacks (including our withUniqueQueryId HOC) to run.
+		await page.waitForTimeout( 2000 );
+
+		const reloadedQueryId = await page.evaluate( () => {
+			const blocks = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlocksByName( 'core/query' );
+			const block = window.wp.data
+				.select( 'core/block-editor' )
+				.getBlock( blocks[ 0 ] );
+			return block.attributes.queryId;
+		} );
+
+		// The queryId must not have changed — stable ids prevent rewriting.
+		expect( reloadedQueryId ).toBe( initialQueryId );
+
+		// The editor must not be dirty; any attribute rewrite on load would
+		// have triggered the "unsaved changes / Leave site?" warning.
+		const isDirty = await page.evaluate( () => {
+			return window.wp.data.select( 'core/editor' ).isEditedPostDirty();
+		} );
+
+		expect( isDirty ).toBe( false );
 	} );
 
 	test( 'should have unique queryId in saved content and exclude posts correctly on front end', async ( {
@@ -238,7 +361,6 @@ test.describe( 'Unique Query IDs', () => {
 			} );
 		} );
 
-		console.log( 'Query IDs before publish:', queryIds );
 		expect( queryIds ).toHaveLength( 2 );
 		const uniqueIds = [ ...new Set( queryIds ) ];
 		expect( uniqueIds ).toHaveLength( 2 );
@@ -251,9 +373,6 @@ test.describe( 'Unique Query IDs', () => {
 			.locator( '.wp-block-post-template .wp-block-post-title' )
 			.allTextContents();
 
-		console.log( 'All post titles on page:', allPostTitles );
-		console.log( 'Total posts:', allPostTitles.length );
-
 		// Both query loops should have posts (each shows 10 by default)
 		expect( allPostTitles.length ).toBe( 20 );
 
@@ -261,7 +380,6 @@ test.describe( 'Unique Query IDs', () => {
 		// the second loop should exclude posts from the first.
 		// All 20 titles should be unique.
 		const uniqueTitles = [ ...new Set( allPostTitles ) ];
-		console.log( 'Unique posts:', uniqueTitles.length );
 		expect( uniqueTitles ).toHaveLength( 20 );
 	} );
 } );
