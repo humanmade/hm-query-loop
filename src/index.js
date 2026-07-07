@@ -64,8 +64,15 @@ addFilter(
  * Ensure each Query Loop block has a unique queryId attribute.
  *
  * WordPress core does not deduplicate queryId when blocks are duplicated.
- * This HOC generates a unique queryId from the current post ID and the
- * block's index among all query blocks on the page.
+ * This HOC only assigns a new id when a block's queryId is missing or is
+ * already claimed by an earlier query block, so genuinely duplicated ids are
+ * fixed once while already-unique ids are left untouched.
+ *
+ * It deliberately does not force a strictly index-based value on every load:
+ * doing so rewrites valid, unique ids whenever they don't line up with the
+ * current block order (e.g. after a block is deleted or reordered), which marks
+ * the post as changed the instant the editor opens and surfaces a false
+ * "unsaved changes" / "Leave site?" warning.
  */
 const withUniqueQueryId = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
@@ -75,29 +82,61 @@ const withUniqueQueryId = createHigherOrderComponent( ( BlockEdit ) => {
 			return <BlockEdit { ...props } />;
 		}
 
-		const expectedQueryId = useSelect(
+		const uniqueQueryId = useSelect(
 			( select ) => {
+				const blockEditor = select( 'core/block-editor' );
+				const allQueryBlocks =
+					blockEditor.getBlocksByName( 'core/query' );
+				const index = allQueryBlocks.indexOf( clientId );
+
+				// Bail if the block is not (yet) part of the tree; a transient
+				// state where reassigning would be unsafe.
+				if ( index === -1 ) {
+					return null;
+				}
+
+				const currentId = attributes.queryId;
+				const idOf = ( id ) =>
+					blockEditor.getBlockAttributes( id )?.queryId;
+
+				// Keep the existing id if it is set and not already used by an
+				// earlier query block. Only missing ids or later duplicates get
+				// reassigned, so unique ids are never rewritten on load. This
+				// mirrors the server-side deduplicate_query_ids() behaviour.
+				const earlierIds = allQueryBlocks.slice( 0, index ).map( idOf );
+				if ( currentId && ! earlierIds.includes( currentId ) ) {
+					return null;
+				}
+
 				let postId = 0;
 				try {
 					postId = select( 'core/editor' )?.getCurrentPostId?.() || 0;
 				} catch {
 					postId = 0;
 				}
-				const allQueryBlocks =
-					select( 'core/block-editor' ).getBlocksByName(
-						'core/query'
-					);
-				const index = allQueryBlocks.indexOf( clientId );
-				return postId * 1000 + index + 1;
+
+				// Generate a unique id, skipping any already used by another
+				// query block on the page.
+				const otherIds = allQueryBlocks
+					.filter( ( id ) => id !== clientId )
+					.map( idOf );
+				let candidate = postId * 1000 + index + 1;
+				while ( otherIds.includes( candidate ) ) {
+					candidate++;
+				}
+				return candidate;
 			},
-			[ clientId ]
+			[ clientId, attributes.queryId ]
 		);
 
 		useEffect( () => {
-			if ( attributes.queryId !== expectedQueryId ) {
-				setAttributes( { queryId: expectedQueryId } );
+			if (
+				uniqueQueryId !== null &&
+				attributes.queryId !== uniqueQueryId
+			) {
+				setAttributes( { queryId: uniqueQueryId } );
 			}
-		}, [ expectedQueryId, attributes.queryId, setAttributes ] );
+		}, [ uniqueQueryId, attributes.queryId, setAttributes ] );
 
 		return <BlockEdit { ...props } />;
 	};
