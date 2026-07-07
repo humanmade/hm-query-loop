@@ -118,8 +118,6 @@ test.describe( 'Unique Query IDs', () => {
 			} );
 		} );
 
-		console.log( 'Query IDs in editor:', queryIds );
-
 		// Verify we have 3 query loops
 		expect( queryIds ).toHaveLength( 3 );
 
@@ -131,7 +129,6 @@ test.describe( 'Unique Query IDs', () => {
 
 		// Verify all queryIds are unique
 		const uniqueIds = [ ...new Set( queryIds ) ];
-		console.log( 'Unique query IDs:', uniqueIds );
 		expect( uniqueIds ).toHaveLength( 3 );
 	} );
 
@@ -212,7 +209,6 @@ test.describe( 'Unique Query IDs', () => {
 			return block.attributes.queryId;
 		} );
 
-		console.log( 'Initial queryId:', initialQueryId );
 		expect( typeof initialQueryId ).toBe( 'number' );
 
 		// Publish the page
@@ -250,8 +246,6 @@ test.describe( 'Unique Query IDs', () => {
 			return block.attributes.queryId;
 		} );
 
-		console.log( 'QueryId after reload:', reloadedQueryId );
-
 		// The queryId must not have changed — stable ids prevent rewriting.
 		expect( reloadedQueryId ).toBe( initialQueryId );
 
@@ -261,7 +255,6 @@ test.describe( 'Unique Query IDs', () => {
 			return window.wp.data.select( 'core/editor' ).isEditedPostDirty();
 		} );
 
-		console.log( 'Is editor dirty after reload:', isDirty );
 		expect( isDirty ).toBe( false );
 	} );
 
@@ -368,7 +361,6 @@ test.describe( 'Unique Query IDs', () => {
 			} );
 		} );
 
-		console.log( 'Query IDs before publish:', queryIds );
 		expect( queryIds ).toHaveLength( 2 );
 		const uniqueIds = [ ...new Set( queryIds ) ];
 		expect( uniqueIds ).toHaveLength( 2 );
@@ -381,9 +373,6 @@ test.describe( 'Unique Query IDs', () => {
 			.locator( '.wp-block-post-template .wp-block-post-title' )
 			.allTextContents();
 
-		console.log( 'All post titles on page:', allPostTitles );
-		console.log( 'Total posts:', allPostTitles.length );
-
 		// Both query loops should have posts (each shows 10 by default)
 		expect( allPostTitles.length ).toBe( 20 );
 
@@ -391,7 +380,6 @@ test.describe( 'Unique Query IDs', () => {
 		// the second loop should exclude posts from the first.
 		// All 20 titles should be unique.
 		const uniqueTitles = [ ...new Set( allPostTitles ) ];
-		console.log( 'Unique posts:', uniqueTitles.length );
 		expect( uniqueTitles ).toHaveLength( 20 );
 	} );
 } );
