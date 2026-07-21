@@ -61,6 +61,40 @@ addFilter(
 );
 
 /**
+ * Derive a numeric seed for generated query IDs from the current post ID.
+ *
+ * In the post editor `getCurrentPostId()` returns a numeric post ID, but in the
+ * site editor it returns the template's string id (`theme//archive-opinion`),
+ * for which `postId * 1000` is NaN. NaN poisons every comparison downstream:
+ * `NaN !== NaN` is always true, so the id would be rewritten on every render,
+ * and `[ NaN ].includes( NaN )` is true, so the dedupe loop below would spin
+ * forever and hang the editor.
+ *
+ * Non-numeric ids are hashed to a stable integer instead. Stability matters: a
+ * seed that changed between loads would rewrite ids on open and reintroduce the
+ * false "unsaved changes" warning this HOC exists to avoid.
+ *
+ * @param {number|string} postId Current post or template ID.
+ * @return {number} A finite, stable numeric seed.
+ */
+const getQueryIdSeed = ( postId ) => {
+	const numericId = Number( postId );
+
+	if ( Number.isFinite( numericId ) ) {
+		return numericId;
+	}
+
+	let hash = 0;
+	const key = String( postId );
+	for ( let i = 0; i < key.length; i++ ) {
+		// Bounded each round so the seed stays a small, exact integer.
+		hash = ( hash * 31 + key.charCodeAt( i ) ) % 100000;
+	}
+
+	return hash;
+};
+
+/**
  * Ensure each Query Loop block has a unique queryId attribute.
  *
  * WordPress core does not deduplicate queryId when blocks are duplicated.
@@ -116,11 +150,12 @@ const withUniqueQueryId = createHigherOrderComponent( ( BlockEdit ) => {
 				}
 
 				// Generate a unique id, skipping any already used by another
-				// query block on the page.
+				// query block on the page. The seed is always finite, which is
+				// what guarantees this loop terminates.
 				const otherIds = allQueryBlocks
 					.filter( ( id ) => id !== clientId )
 					.map( idOf );
-				let candidate = postId * 1000 + index + 1;
+				let candidate = getQueryIdSeed( postId ) * 1000 + index + 1;
 				while ( otherIds.includes( candidate ) ) {
 					candidate++;
 				}
