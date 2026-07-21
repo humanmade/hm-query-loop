@@ -382,4 +382,85 @@ test.describe( 'Unique Query IDs', () => {
 		const uniqueTitles = [ ...new Set( allPostTitles ) ];
 		expect( uniqueTitles ).toHaveLength( 20 );
 	} );
+
+	test( 'should assign finite, unique queryIds in the site editor', async ( {
+		page,
+		editor,
+		blockEditor,
+	} ) => {
+		// The site editor's "post ID" is the template's string id
+		// (`theme//slug`), not a number. Generating ids from it without
+		// coercing to a number yields NaN, and because `NaN !== NaN` and
+		// `[ NaN ].includes( NaN )` is true, that previously rewrote the
+		// attribute on every render and hung the editor in the dedupe loop.
+		await blockEditor.visitSiteEditor( 'index' );
+
+		const templateId = await page.evaluate( () =>
+			window.wp.data.select( 'core/editor' ).getCurrentPostId()
+		);
+
+		// Guard the premise of this test: if core ever starts handing the site
+		// editor a numeric id, this test would silently stop covering the bug.
+		expect( typeof templateId ).toBe( 'string' );
+
+		// Two query blocks sharing a queryId. The first keeps its id; the
+		// second is a duplicate, so it takes the id-generation path.
+		await editor.setContent(
+			`<!-- wp:query {"queryId":10,"query":{"perPage":3,"postType":"post","inherit":false}} -->
+<div class="wp-block-query"><!-- wp:post-template -->
+<!-- wp:post-title /-->
+<!-- /wp:post-template --></div>
+<!-- /wp:query -->
+
+<!-- wp:query {"queryId":10,"query":{"perPage":3,"postType":"post","inherit":false}} -->
+<div class="wp-block-query"><!-- wp:post-template -->
+<!-- wp:post-title /-->
+<!-- /wp:post-template --></div>
+<!-- /wp:query -->`
+		);
+
+		// Let the HOC settle. A regression hangs the editor here, so the
+		// evaluate below times out rather than returning a wrong value.
+		await page.waitForTimeout( 2000 );
+
+		const queryIds = await page.evaluate( () => {
+			const { select } = window.wp.data;
+			return select( 'core/block-editor' )
+				.getBlocksByName( 'core/query' )
+				.map(
+					( clientId ) =>
+						select( 'core/block-editor' ).getBlockAttributes(
+							clientId
+						).queryId
+				);
+		} );
+
+		expect( queryIds ).toHaveLength( 2 );
+
+		// The regression assertion: NaN is a number but not a finite one, so
+		// `typeof` alone would not have caught it.
+		for ( const queryId of queryIds ) {
+			expect( Number.isFinite( queryId ) ).toBe( true );
+		}
+
+		expect( [ ...new Set( queryIds ) ] ).toHaveLength( 2 );
+
+		// Ids must also be stable once assigned — an id that keeps changing
+		// marks the template dirty on every render.
+		await page.waitForTimeout( 1000 );
+
+		const settledQueryIds = await page.evaluate( () => {
+			const { select } = window.wp.data;
+			return select( 'core/block-editor' )
+				.getBlocksByName( 'core/query' )
+				.map(
+					( clientId ) =>
+						select( 'core/block-editor' ).getBlockAttributes(
+							clientId
+						).queryId
+				);
+		} );
+
+		expect( settledQueryIds ).toEqual( queryIds );
+	} );
 } );
