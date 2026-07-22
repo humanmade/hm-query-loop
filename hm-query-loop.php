@@ -101,6 +101,14 @@ function enqueue_block_editor_assets() {
 		[],
 		$asset_file['version']
 	);
+
+	wp_enqueue_script(
+		'hm-query-loop-manual-posts',
+		HM_QUERY_LOOP_URL . 'assets/manual-posts.js',
+		[ 'wp-blocks', 'wp-element', 'wp-hooks', 'wp-components', 'wp-compose', 'wp-block-editor', 'wp-api-fetch' ],
+		filemtime( HM_QUERY_LOOP_PATH . 'assets/manual-posts.js' ),
+		[ 'in_footer' => false ]
+	);
 }
 
 /**
@@ -392,6 +400,10 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 			$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
 			$block->context['hmQueryLoop'] ?? [],
 		);
+		// Pass the parent core/query block's query object (including manualPosts) to the modifier.
+		if ( empty( $attrs['query'] ) ) {
+			$attrs['query'] = $block->context['query'] ?? [];
+		}
 		$query_id = $block->context['queryId'] ?? 0;
 
 		// Initialize tracking array for this query loop if not exists
@@ -468,6 +480,29 @@ function exclude_posts_from_query( $query, $excluded_ids ) {
 function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	global $original_paged;
 
+	// Manual post selection: only active when manualSelect flag is set.
+	$manual_select = $attrs['query']['manualSelect'] ?? false;
+	$manual_posts  = $manual_select ? ( $attrs['query']['manualPosts'] ?? [] ) : [];
+	if ( ! empty( $manual_posts ) ) {
+		$ids = array_values(
+			array_filter(
+				array_map(
+					function( $p ) {
+						return is_array( $p ) ? intval( $p['id'] ) : intval( $p );
+					},
+					$manual_posts
+				)
+			)
+		);
+
+		if ( ! empty( $ids ) ) {
+			$query['post__in']            = $ids;
+			$query['orderby']             = 'post__in';
+			$query['posts_per_page']      = count( $ids );
+			$query['ignore_sticky_posts'] = true;
+		}
+	}
+
 	// Get the hmQueryLoop settings object.
 	$settings = $attrs['hmQueryLoop'] ?? [];
 
@@ -482,7 +517,8 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 	}
 
 	// Apply custom posts per page if set and is a valid number.
-	if ( isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
+	// Skip when manual post selection is active — it already sets posts_per_page precisely.
+	if ( empty( $manual_posts ) && isset( $settings['perPage'] ) && is_numeric( $settings['perPage'] ) && $settings['perPage'] > 0 ) {
 		$query['posts_per_page'] = (int) $settings['perPage'];
 	}
 
