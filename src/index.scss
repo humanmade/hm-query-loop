@@ -23,3 +23,52 @@
 		}
 	}
 }
+
+/**
+ * Curated Posts control
+ */
+.hm-query-loop-curated-list {
+	margin-bottom: 8px;
+}
+
+.hm-query-loop-curated-item {
+	padding: 4px 6px;
+	background: #f0f0f0;
+	border-radius: 2px;
+	min-height: 32px;
+
+	&__title {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 12px;
+	}
+}
+
+.hm-query-loop-curated-results {
+	max-height: 240px;
+	overflow-y: auto;
+	border: 1px solid #ddd;
+	border-radius: 2px;
+	padding: 4px;
+}
+
+.hm-query-loop-curated-result {
+	display: block !important;
+	width: 100%;
+	text-align: left !important;
+	justify-content: flex-start !important;
+}
+
+.hm-query-loop-curated-error {
+	color: #cc1818;
+	font-size: 12px;
+	margin: 0;
+}
+
+.hm-query-loop-curated-empty {
+	color: #757575;
+	font-size: 12px;
+	font-style: italic;
+	margin: 0;
+}
