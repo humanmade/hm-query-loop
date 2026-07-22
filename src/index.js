@@ -514,7 +514,17 @@ const withQueryLoopContextProvider = createHigherOrderComponent(
 								);
 							}
 						);
-					return childPostTemplatesClientIds.map( getBlock );
+					// Filter out any null results: getBlock() can transiently
+					// return null during the site editor's initial block-tree
+					// construction (e.g. when a pattern block's inner blocks are
+					// registered in the name index before their full record lands
+					// in byClientId). Leaving nulls in the array crashes the
+					// consuming HOCs (withPostTemplateStyles,
+					// withPostTemplateInspectorControls) when they access
+					// postTemplate.clientId.
+					return childPostTemplatesClientIds
+						.map( getBlock )
+						.filter( Boolean );
 				},
 				[ clientId ]
 			);
@@ -586,13 +596,17 @@ const withPostTemplateStyles = createHigherOrderComponent( ( BlockEdit ) => {
 		`
 				: '';
 
-		const hideAfterLimit = `
+		// Only inject the after-limit rule when perPage is known; without it
+		// the expression evaluates to NaN and produces an invalid selector.
+		const hideAfterLimit = perPage
+			? `
 			${ blockSelector } :is(.wp-block-post:not([style*="display: none"])):nth-of-type(n+${
 				offset + perPage + 2
 			}) {
 				display: none !important;
 			}
-		`;
+		`
+			: '';
 
 		// When a subsequent post-template is shown with a positive offset, the initial dropzone placeholder
 		// and hidden preview block cause the CSS hiding to be off by one. Each post template actually contains
