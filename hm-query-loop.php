@@ -244,10 +244,15 @@ function deduplicate_query_ids( $pre_render, $parsed_block ) {
 	// for this specific query block, not nested ones.
 	$depth = 0;
 
-	// Dynamically add a render_block_context filter to override queryId
-	// for any core/post-template blocks inside this query.
-	$context_filter = function ( $context, $inner_parsed_block ) use ( $unique_query_id ) {
-		if ( 'core/post-template' === $inner_parsed_block['blockName'] ) {
+	// Dynamically add a render_block_context filter to propagate the reassigned
+	// queryId to every descendant that inherited the original id — the
+	// post-template plus any sibling blocks that build query URLs from it
+	// (core/query-pagination, core/search, and the query-filter blocks).
+	// Match on the inherited queryId rather than the block name so a nested
+	// core/query, which provides its own queryId to its children, is left
+	// untouched.
+	$context_filter = function ( $context ) use ( $unique_query_id, $original_query_id ) {
+		if ( ( $context['queryId'] ?? null ) === $original_query_id ) {
 			$context['queryId'] = $unique_query_id;
 		}
 		return $context;
