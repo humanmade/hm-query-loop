@@ -170,20 +170,19 @@ This plugin uses GitHub Actions for automated versioning and release asset creat
 
 ### Creating a Release
 
-1. Make sure the `release` branch is built and ready (assets should be in the `build/` directory)
+1. Check the `release` branch is built and ready (assets should be in the `build/` directory)
 2. Go to the GitHub repository and create a new release:
-   - Click "Releases" → "Draft a new release"
-   - Create a new tag (e.g., `v1.2.3`) from the `release` branch
-   - Add release title and notes
-   - Click "Publish release"
+   - [Go to the Actions tab, and then the Release action](https://github.com/humanmade/hm-query-loop/actions/workflows/release.yml)
+   - Select "Run Workflow" and fill in the new version number and any other fields as needed
+   - Run the workflow
 3. The GitHub Action will automatically:
    - Checkout the code at the tag you created
    - Replace `__VERSION__` placeholders with the actual version number
-   - Commit the versioned file back to the tag
+   - Commit the built and versioned files to the tag
    - Create a production-ready ZIP file (excluding dev files)
    - Upload the ZIP as a release asset
 
-The tag version (e.g., `v1.2.3`) will be used as the plugin version. The version number should follow semantic versioning.
+The tag version (e.g., `1.2.3`) will be used as the plugin version. The version number should follow semantic versioning.
 
 ## License
 
