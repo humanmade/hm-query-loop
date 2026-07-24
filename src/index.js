@@ -639,20 +639,15 @@ addFilter(
 );
 
 /**
- * Placeholder shown in place of a Query Loop block until it scrolls into view.
+ * The core Query Loop immediately requests its post via REST on render, which
+ * can lock up the editor and hammer the server on a page with many query loops.
  *
- * Rendering the real block edit component mounts the core Query Loop, which
- * immediately fires a REST request to fetch its posts for the preview. On a
- * page with many query loops every one of those requests is dispatched up
- * front on editor load, which is slow and can hammer the server. This
- * placeholder is cheap to render and issues no requests; the real block is
- * only mounted once the placeholder intersects the viewport.
+ * This component renders a cheap placeholder that issues no requests while
+ * the Query Loop block is outside of the viewport, then initializes on demand.
  *
- * The IntersectionObserver is created from the target node's own
- * `defaultView` so the correct viewport is used whether or not the editor
- * canvas is rendered inside an iframe (the site editor and the block-themed
- * post editor both iframe the canvas). If IntersectionObserver is
- * unavailable the block is rendered immediately as a safe fallback.
+ * Our IntersectionObserver is created from the target node's own `defaultView`
+ * so the correct viewport is used whether or not the editor is iframe'd.
+ * Blocks render as normal if IntersectionObserver is not available.
  *
  * @param {Object}   props                 Component props.
  * @param {Function} props.onEnterViewport Called once the placeholder is at
@@ -710,13 +705,58 @@ function QueryLoopPlaceholder( { onEnterViewport } ) {
 }
 
 /**
- * Defer rendering of off-screen Query Loop blocks in the editor.
+ * Render a Query Loop block lazily, swapping in a placeholder until it is near
+ * the viewport.
  *
- * Until a Query Loop scrolls near the viewport it is replaced with a cheap
- * placeholder that fires no API requests. Selecting the block (e.g. right
- * after inserting it, or via the List View) renders it immediately, and once
- * a block has been rendered it stays rendered so scrolling away does not
- * discard edits or trigger a refetch.
+ * Selecting the block (e.g. right after inserting it, or via the List View)
+ * renders it immediately, and once a block has been rendered it stays rendered
+ * so scrolling away does not discard edits or trigger a refetch.
+ *
+ * Kept as its own component — rather than inlined into the HOC below — so its
+ * hooks are never called after the HOC's early return for non-query blocks,
+ * which would violate the rules of hooks.
+ *
+ * @param {Object}    props           Block edit props.
+ * @param {Component} props.BlockEdit The wrapped block edit component.
+ * @return {Element} The rendered block or its placeholder.
+ */
+function LazyBlockEdit( { BlockEdit, ...props } ) {
+	const { isSelected, clientId } = props;
+
+	const [ isReady, setIsReady ] = useState( false );
+	const handleEnterViewport = useCallback( () => setIsReady( true ), [] );
+
+	// The block must also render when one of its inner blocks is selected
+	// (e.g. reached through the List View), otherwise that block would be
+	// selected but never mounted for editing.
+	const hasSelectedInnerBlock = useSelect(
+		( select ) =>
+			select( 'core/block-editor' ).hasSelectedInnerBlock(
+				clientId,
+				true
+			),
+		[ clientId ]
+	);
+
+	const isActive = isSelected || hasSelectedInnerBlock;
+
+	// Latch to rendered once selected so deselecting does not collapse the
+	// block back to a placeholder and refetch.
+	useEffect( () => {
+		if ( isActive ) {
+			setIsReady( true );
+		}
+	}, [ isActive ] );
+
+	if ( isReady || isActive ) {
+		return <BlockEdit { ...props } />;
+	}
+
+	return <QueryLoopPlaceholder onEnterViewport={ handleEnterViewport } />;
+}
+
+/**
+ * Defer rendering of off-screen Query Loop blocks in the editor.
  *
  * This HOC is registered last so it wraps the plugin's other Query Loop
  * enhancements: while the placeholder is shown none of them — nor the core
@@ -724,42 +764,11 @@ function QueryLoopPlaceholder( { onEnterViewport } ) {
  */
 const withViewportPlaceholder = createHigherOrderComponent( ( BlockEdit ) => {
 	return ( props ) => {
-		const { name, isSelected, clientId } = props;
-
-		if ( name !== 'core/query' ) {
+		if ( props.name !== 'core/query' ) {
 			return <BlockEdit { ...props } />;
 		}
 
-		const [ isReady, setIsReady ] = useState( false );
-		const handleEnterViewport = useCallback( () => setIsReady( true ), [] );
-
-		// The block must also render when one of its inner blocks is selected
-		// (e.g. reached through the List View), otherwise that block would be
-		// selected but never mounted for editing.
-		const hasSelectedInnerBlock = useSelect(
-			( select ) =>
-				select( 'core/block-editor' ).hasSelectedInnerBlock(
-					clientId,
-					true
-				),
-			[ clientId ]
-		);
-
-		const isActive = isSelected || hasSelectedInnerBlock;
-
-		// Latch to rendered once selected so deselecting does not collapse the
-		// block back to a placeholder and refetch.
-		useEffect( () => {
-			if ( isActive ) {
-				setIsReady( true );
-			}
-		}, [ isActive ] );
-
-		if ( isReady || isActive ) {
-			return <BlockEdit { ...props } />;
-		}
-
-		return <QueryLoopPlaceholder onEnterViewport={ handleEnterViewport } />;
+		return <LazyBlockEdit BlockEdit={ BlockEdit } { ...props } />;
 	};
 }, 'withViewportPlaceholder' );
 
