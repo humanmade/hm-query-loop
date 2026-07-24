@@ -23,3 +23,15 @@
 		}
 	}
 }
+
+/**
+ * Placeholder shown for off-screen Query Loop blocks until they scroll into
+ * view. Reserves vertical space so the block is tall enough to be observed and
+ * so the surrounding layout does not jump when the real block is swapped in.
+ */
+.hm-query-loop-viewport-placeholder {
+
+	.components-placeholder {
+		min-height: 200px;
+	}
+}
