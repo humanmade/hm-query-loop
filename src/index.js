@@ -2,17 +2,26 @@
  * WordPress dependencies
  */
 import { addFilter } from '@wordpress/hooks';
-import { createHigherOrderComponent } from '@wordpress/compose';
+import { createHigherOrderComponent, useMergeRefs } from '@wordpress/compose';
 import { useSelect } from '@wordpress/data';
-import { InspectorControls } from '@wordpress/block-editor';
+import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
 import {
 	PanelBody,
 	ToggleControl,
 	TextControl,
 	SelectControl,
+	Placeholder,
+	Spinner,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { createContext, useContext, useEffect } from '@wordpress/element';
+import {
+	createContext,
+	useContext,
+	useEffect,
+	useState,
+	useRef,
+	useCallback,
+} from '@wordpress/element';
 
 /**
  * Styles
@@ -226,11 +235,13 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		}
 
 		const { hmQueryLoop = {}, query = {} } = attributes;
-		const { perPage, hideOnPaged, excludeDisplayed, useElasticPress } = hmQueryLoop;
+		const { perPage, hideOnPaged, excludeDisplayed, useElasticPress } =
+			hmQueryLoop;
 
 		const isInheritQuery = query.inherit || false;
 		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
-		const elasticPressAvailable = window.hmQueryLoopSettings?.elasticPressAvailable ?? false;
+		const elasticPressAvailable =
+			window.hmQueryLoopSettings?.elasticPressAvailable ?? false;
 
 		// Get available presets from PHP.
 		const availablePresets = window.hmQueryLoopPresets?.presets || [];
@@ -625,4 +636,135 @@ addFilter(
 	'editor.BlockEdit',
 	'hm-query-loop/with-post-template-styles',
 	withPostTemplateStyles
+);
+
+/**
+ * Placeholder shown in place of a Query Loop block until it scrolls into view.
+ *
+ * Rendering the real block edit component mounts the core Query Loop, which
+ * immediately fires a REST request to fetch its posts for the preview. On a
+ * page with many query loops every one of those requests is dispatched up
+ * front on editor load, which is slow and can hammer the server. This
+ * placeholder is cheap to render and issues no requests; the real block is
+ * only mounted once the placeholder intersects the viewport.
+ *
+ * The IntersectionObserver is created from the target node's own
+ * `defaultView` so the correct viewport is used whether or not the editor
+ * canvas is rendered inside an iframe (the site editor and the block-themed
+ * post editor both iframe the canvas). If IntersectionObserver is
+ * unavailable the block is rendered immediately as a safe fallback.
+ *
+ * @param {Object}   props                 Component props.
+ * @param {Function} props.onEnterViewport Called once the placeholder is at
+ *                                         or near the viewport.
+ * @return {Element} Placeholder element.
+ */
+function QueryLoopPlaceholder( { onEnterViewport } ) {
+	const observerRef = useRef();
+	const blockProps = useBlockProps( {
+		className: 'hm-query-loop-viewport-placeholder',
+	} );
+	const mergedRef = useMergeRefs( [ blockProps.ref, observerRef ] );
+
+	useEffect( () => {
+		const node = observerRef.current;
+		if ( ! node ) {
+			return;
+		}
+
+		const view = node.ownerDocument?.defaultView;
+		if ( ! view?.IntersectionObserver ) {
+			// No observer support: fall back to rendering the block now.
+			onEnterViewport();
+			return;
+		}
+
+		const observer = new view.IntersectionObserver(
+			( entries ) => {
+				if ( entries.some( ( entry ) => entry.isIntersecting ) ) {
+					onEnterViewport();
+				}
+			},
+			// Load a little before the block is actually on screen so the
+			// preview is ready by the time the user scrolls to it.
+			{ rootMargin: '300px 0px' }
+		);
+		observer.observe( node );
+
+		return () => observer.disconnect();
+	}, [ onEnterViewport ] );
+
+	return (
+		<div { ...blockProps } ref={ mergedRef }>
+			<Placeholder
+				label={ __( 'Query Loop', 'hm-query-loop' ) }
+				instructions={ __(
+					'The preview will load when this block scrolls into view.',
+					'hm-query-loop'
+				) }
+			>
+				<Spinner />
+			</Placeholder>
+		</div>
+	);
+}
+
+/**
+ * Defer rendering of off-screen Query Loop blocks in the editor.
+ *
+ * Until a Query Loop scrolls near the viewport it is replaced with a cheap
+ * placeholder that fires no API requests. Selecting the block (e.g. right
+ * after inserting it, or via the List View) renders it immediately, and once
+ * a block has been rendered it stays rendered so scrolling away does not
+ * discard edits or trigger a refetch.
+ *
+ * This HOC is registered last so it wraps the plugin's other Query Loop
+ * enhancements: while the placeholder is shown none of them — nor the core
+ * block itself — are mounted.
+ */
+const withViewportPlaceholder = createHigherOrderComponent( ( BlockEdit ) => {
+	return ( props ) => {
+		const { name, isSelected, clientId } = props;
+
+		if ( name !== 'core/query' ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		const [ isReady, setIsReady ] = useState( false );
+		const handleEnterViewport = useCallback( () => setIsReady( true ), [] );
+
+		// The block must also render when one of its inner blocks is selected
+		// (e.g. reached through the List View), otherwise that block would be
+		// selected but never mounted for editing.
+		const hasSelectedInnerBlock = useSelect(
+			( select ) =>
+				select( 'core/block-editor' ).hasSelectedInnerBlock(
+					clientId,
+					true
+				),
+			[ clientId ]
+		);
+
+		const isActive = isSelected || hasSelectedInnerBlock;
+
+		// Latch to rendered once selected so deselecting does not collapse the
+		// block back to a placeholder and refetch.
+		useEffect( () => {
+			if ( isActive ) {
+				setIsReady( true );
+			}
+		}, [ isActive ] );
+
+		if ( isReady || isActive ) {
+			return <BlockEdit { ...props } />;
+		}
+
+		return <QueryLoopPlaceholder onEnterViewport={ handleEnterViewport } />;
+	};
+}, 'withViewportPlaceholder' );
+
+addFilter(
+	'editor.BlockEdit',
+	'hm-query-loop/with-viewport-placeholder',
+	withViewportPlaceholder
 );
