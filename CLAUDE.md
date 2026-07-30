@@ -16,6 +16,7 @@ HM Query Loop is a WordPress plugin that extends the core Query Loop block with 
 - `npm run format` - Format all files
 
 ### Testing
+- `npm run test:php` - Run the PHP unit tests (no WordPress or Docker needed)
 - `npm run wp-env start` - Start WordPress test environment (ports 8888 dev, 8889 tests)
 - `npm run test:e2e` - Run Playwright end-to-end tests
 - `npm run test:e2e:debug` - Run tests in debug mode
@@ -59,7 +60,18 @@ The plugin handles two different query scenarios:
 ### Post Tracking
 - `the_posts` filter tracks displayed post IDs across all query loops on a page
 - Global `$displayed_post_ids` array accumulates IDs from rendered query loops
-- Subsequent query loops with `excludeDisplayed` enabled filter out tracked IDs via `post__not_in`
+- Subsequent query loops with `excludeDisplayed` enabled filter out tracked IDs
+- The exclusion set is snapshotted per loop (`$query_loop_exclusion_snapshots`) so every query a loop runs — post templates, pagination, total — excludes the same posts and shares one cache entry
+
+### Deferred Exclusions (`inc/deferred-exclusions.php`)
+`post__not_in` puts excluded IDs into the SQL, and `WP_Query` derives its `post-queries` cache key from the SQL, so a loop excluding the post being viewed gets a private cache entry on every URL. For non-inherited queries the plugin instead over-fetches by `count( $exclude )` and drops the posts in PHP on `the_posts` — which core runs *after* writing the result to the object cache, so the shareable superset is what gets cached.
+
+- `plan_query()` (`query_loop_block_query_vars`, priority 999 — after presets) turns recorded exclusions and post-template windows into a fetch plan
+- Sources: core's `query.excludeCurrent`, the plugin's `excludeDisplayed`, and the `hm_query_loop_deferred_exclusions` filter
+- `bind_context()` (`pre_get_posts`, priority 0) strips the plugin's state from the query vars before the cache key is generated, binding it to the `WP_Query` instance instead. **Any** custom query var reaches the cache key, so nothing this plugin tracks may be left in there
+- `filter_posts()` (`the_posts`, priority 9) applies the plan and corrects `found_posts`/`max_num_pages`; it runs before post tracking at priority 10
+- Falls back to SQL exclusion when the fetch would exceed `hm_query_loop_max_deferred_fetch` (default 100), when `hm_query_loop_defer_exclusions` is false, or when the query cannot reach `the_posts` (`fields => ids`, `suppress_filters`)
+- See `docs/query-caching.md`
 
 ### Editor Viewport Placeholder (Lazy Rendering)
 `withViewportPlaceholder` HOC (registered last, so it wraps the plugin's other `core/query` enhancements) replaces off-screen Query Loop blocks with a cheap `<Placeholder>` that fires no REST request. Mounting the real block triggers the core preview fetch, so on a page with many query loops this defers those requests until each block scrolls near the viewport. An `IntersectionObserver` — constructed from the target node's own `ownerDocument.defaultView` so it works whether or not the canvas is iframed — swaps in the real block on intersection (with a 300px `rootMargin` preload). Selecting a block (e.g. right after insertion or via List View) renders it immediately, and once rendered a block stays rendered (latched via state) so scrolling away neither discards edits nor refetches.
@@ -71,7 +83,7 @@ The plugin handles two different query scenarios:
 A non-inherited Query Loop can contain multiple `core/post-template` blocks, each showing a different slice of the results:
 - `withPostTemplateInspectorControls` HOC adds "Posts per template" to each `core/post-template`'s inspector, clamped to remaining available posts.
 - `withQueryLoopContextProvider` HOC wraps `core/query` with a `UsedPostsContext.Provider` so sibling post-template blocks share their `perPage` values.
-- Server-side: `filter_query_loop_block_query_vars` computes `posts_per_page` and offset per template using `$query_loop_post_template_per_pages` (keyed by `queryId`).
+- Server-side: `filter_query_loop_block_query_vars` records each template's window (start and size) using `$query_loop_post_template_per_pages` (keyed by `queryId`). Every template then issues the loop's own unmodified query and slices its own window out of the results in PHP, so they share one query and one cache entry.
 
 ### Query ID Deduplication
 WordPress does not deduplicate `queryId` when blocks are copy-pasted, breaking post exclusion and pagination:
@@ -107,7 +119,10 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 - `hm-query-loop.php` - Main plugin file with all PHP hooks and query modification logic
 - `inc/query-presets.php` - Query presets registration API and hooks
+- `inc/deferred-exclusions.php` - PHP-side post exclusion and post-template windowing
+- `docs/query-caching.md` - Why exclusions are applied in PHP, and what is left to do
 - `src/index.js` - Block filters for adding inspector controls and editor preview behavior
+- `tests/php/deferred-exclusions-test.php` - Unit tests for the exclusion planner
 - `tests/e2e/fixtures.js` - Playwright test fixtures for WordPress admin
 - `tests/e2e/posts-per-page.spec.js` - E2E tests for posts per page functionality
 - `tests/e2e/query-presets.spec.js` - E2E tests for query presets

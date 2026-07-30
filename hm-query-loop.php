@@ -27,6 +27,9 @@ define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 // Load query presets functionality.
 require_once HM_QUERY_LOOP_PATH . 'inc/query-presets.php';
 
+// Load PHP-side post exclusions.
+require_once HM_QUERY_LOOP_PATH . 'inc/deferred-exclusions.php';
+
 /**
  * Initialize the plugin.
  */
@@ -42,7 +45,7 @@ function init() {
 	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 11, 2 );
 
 	// Hook query_loop_block_query_vars to modify the query.
-	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 2 );
+	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 3 );
 
 	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
@@ -52,6 +55,9 @@ function init() {
 
 	// Initialize query presets functionality.
 	QueryPresets\init();
+
+	// Initialize PHP-side post exclusions.
+	DeferredExclusions\init();
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
@@ -149,6 +155,19 @@ $query_loop_used_posts = [];
  * @var array
  */
 $query_loop_post_template_per_pages = [];
+
+/**
+ * The set of displayed post IDs each query loop excluded, keyed by query ID.
+ *
+ * A query loop renders several queries — one per post template, plus the ones
+ * the pagination and total blocks run — and each of those must exclude the same
+ * posts to produce the same SQL, and therefore share one cache entry. Taking the
+ * snapshot once per loop stops the set growing as the loop's own posts are
+ * tracked.
+ *
+ * @var array
+ */
+$query_loop_exclusion_snapshots = [];
 
 /**
  * Get displayed post IDs.
@@ -383,52 +402,68 @@ function render_block( $block_content, $block ) {
 /**
  * Filter queries for loops that do not inherit from the main query.
  *
- * @param array $query Query args for the query loop.
+ * @param array    $query Query args for the query loop.
  * @param WP_Block $block Current block instance.
+ * @param int      $page  Current page of the loop.
  * @return array The modified query vars.
  */
-function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
-	if ( $block->name === 'core/post-template' ) {
-		global $query_loop_post_template_per_pages;
+function filter_query_loop_block_query_vars( $query, WP_Block $block, $page = 1 ) {
+	$query_id = $block->context['queryId'] ?? 0;
 
-		// Merge hmQueryLoop context with post template block attribute.
-		$attrs = $block->parsed_block['attrs'];
-		$attrs['hmQueryLoop'] = wp_parse_args(
-			$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
-			$block->context['hmQueryLoop'] ?? [],
-		);
-		$query_id = $block->context['queryId'] ?? 0;
+	$query = DeferredExclusions\track_loop( $query, $query_id );
+	$query = modify_query_from_block_attrs( $query, $block->context, $query_id );
 
-		// Initialize tracking array for this query loop if not exists
-		if ( ! isset( $query_loop_post_template_per_pages[ $query_id ] ) ) {
-			$query_loop_post_template_per_pages[ $query_id ] = [];
-		}
-
-		// Get the query loop's total posts per page
-		$query_per_page = $query['posts_per_page'] ?? get_option( 'posts_per_page', 10 );
-
-		// Calculate total posts used by preceding post templates
-		$used_posts = array_sum( $query_loop_post_template_per_pages[ $query_id ] );
-
-		// Get this post template's per page setting
-		$post_template_per_page = $attrs['hmQueryLoop']['perPage'] ?? null;
-
-		// If no explicit perPage is set, calculate remaining posts
-		if ( empty( $post_template_per_page ) ) {
-			$remaining_posts = max( 1, $query_per_page - $used_posts );
-			$post_template_per_page = $remaining_posts;
-
-			// Set it in attrs so it gets tracked
-			$attrs['hmQueryLoop']['perPage'] = $remaining_posts;
-		}
-
-		// Track this post template's per page value
-		$query_loop_post_template_per_pages[ $query_id ][] = $post_template_per_page;
-
-		$attrs['hmQueryLoop']['excludeDisplayedForCurrentLoop'] = $query_id;
-		return modify_query_from_block_attrs( $query, $attrs );
+	if ( $block->name !== 'core/post-template' ) {
+		return $query;
 	}
-	return modify_query_from_block_attrs( $query, $block->context );
+
+	global $query_loop_post_template_per_pages;
+
+	// Merge hmQueryLoop context with the post template's own attribute.
+	$settings = wp_parse_args(
+		$block->parsed_block['attrs']['hmQueryLoop'] ?? [],
+		$block->context['hmQueryLoop'] ?? [],
+	);
+
+	if ( ! isset( $query_loop_post_template_per_pages[ $query_id ] ) ) {
+		$query_loop_post_template_per_pages[ $query_id ] = [];
+	}
+
+	// How many posts the loop as a whole reads, as core worked it out.
+	$loop_per_page = (int) ( $query['posts_per_page'] ?? get_option( 'posts_per_page', 10 ) );
+
+	// Posts claimed by the post templates that already rendered in this loop.
+	$window_start = (int) array_sum( $query_loop_post_template_per_pages[ $query_id ] );
+
+	$window_size = $settings['perPage'] ?? null;
+	$window_size = empty( $window_size ) ? max( 1, $loop_per_page - $window_start ) : (int) $window_size;
+
+	$query_loop_post_template_per_pages[ $query_id ][] = $window_size;
+
+	// Every post template in the loop reads the same slice of the same result
+	// set and takes its own window out of it in PHP. Narrowing the query per
+	// template instead — with a smaller `posts_per_page` and the preceding
+	// templates' posts in `post__not_in` — gives each template SQL of its own,
+	// and so a cache entry of its own.
+	return DeferredExclusions\set_window( $query, $window_start, $window_size );
+}
+
+/**
+ * Get the posts a query loop should exclude because an earlier loop showed them.
+ *
+ * Snapshotted per loop: see $query_loop_exclusion_snapshots.
+ *
+ * @param string|int $query_id The loop's query ID.
+ * @return array Post IDs.
+ */
+function get_loop_exclusions( $query_id ): array {
+	global $query_loop_exclusion_snapshots;
+
+	if ( ! isset( $query_loop_exclusion_snapshots[ $query_id ] ) ) {
+		$query_loop_exclusion_snapshots[ $query_id ] = get_displayed_post_ids();
+	}
+
+	return $query_loop_exclusion_snapshots[ $query_id ];
 }
 
 /**
@@ -463,27 +498,37 @@ function exclude_posts_from_query( $query, $excluded_ids ) {
 }
 
 /**
- * Modify query using pre_get_posts based on block attributes.
- * This is hooked/unhooked dynamically around Query Loop block rendering.
+ * Modify query args based on block attributes.
  *
- * @param array $query The query args array.
- * @param array $attrs The block attributes/context.
+ * @param array           $query    The query args array.
+ * @param array           $attrs    The block attributes/context.
+ * @param string|int|null $query_id The loop's query ID, or null for the main
+ *                                  query, where exclusions cannot be deferred.
  * @return array Modified query args.
  */
-function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
+function modify_query_from_block_attrs( $query = [], $attrs = [], $query_id = null ) {
 	global $original_paged;
 
 	// Get the hmQueryLoop settings object.
 	$settings = $attrs['hmQueryLoop'] ?? [];
 
-	// Start collecting post IDs.
-	$query['hm_query_loop_collect_ids'] = true;
+	$is_deferred = null !== $query_id;
 
-	// If hiding on paginated URLs force the page to page 1.
-	if ( isset( $settings['hideOnPaged'] ) && $settings['hideOnPaged'] ) {
-		$query['paged'] = 1;
-	} else {
-		$query['paged'] = $original_paged;
+	if ( ! $is_deferred ) {
+		// Start collecting post IDs. Loops that go through track_loop() are
+		// flagged out of band instead, so this never reaches the cache key.
+		$query['hm_query_loop_collect_ids'] = true;
+	}
+
+	// If hiding on paginated URLs force the page to page 1. `offset` takes
+	// precedence over `paged` in the LIMIT clause, so only set it where it can
+	// actually change the result — otherwise it is dead weight in the cache key.
+	if ( ! isset( $query['offset'] ) ) {
+		if ( ! empty( $settings['hideOnPaged'] ) ) {
+			$query['paged'] = 1;
+		} elseif ( ! empty( $original_paged ) ) {
+			$query['paged'] = $original_paged;
+		}
 	}
 
 	// Apply custom posts per page if set and is a valid number.
@@ -496,20 +541,14 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 		$query['ep_integrate'] = true;
 	}
 
-	// Exclude already displayed posts if enabled.
-	if ( isset( $settings['excludeDisplayed'] ) && $settings['excludeDisplayed'] ) {
-		$displayed_ids = get_displayed_post_ids();
-		if ( ! empty( $displayed_ids ) ) {
-			$query = exclude_posts_from_query( $query, $displayed_ids );
-		}
-	}
+	// Exclude posts shown by earlier query loops on this page.
+	if ( ! empty( $settings['excludeDisplayed'] ) ) {
+		$displayed_ids = $is_deferred ? get_loop_exclusions( $query_id ) : get_displayed_post_ids();
 
-	// Exclude already displayed posts for this loop if enabled.
-	if ( isset( $settings['excludeDisplayedForCurrentLoop'] ) ) {
-		$query['query_id'] = $settings['excludeDisplayedForCurrentLoop'];
-		$displayed_ids = get_query_loop_used_posts( $settings['excludeDisplayedForCurrentLoop'] );
 		if ( ! empty( $displayed_ids ) ) {
-			$query = exclude_posts_from_query( $query, $displayed_ids );
+			$query = $is_deferred
+				? DeferredExclusions\add_exclusions( $query, $displayed_ids )
+				: exclude_posts_from_query( $query, $displayed_ids );
 		}
 	}
 
@@ -524,16 +563,28 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
  * @return array Array of post objects.
  */
 function track_displayed_posts( $posts, $query ) {
-	if ( ! $query->get( 'hm_query_loop_collect_ids' ) ) {
+	if ( ! $query instanceof WP_Query ) {
 		return $posts;
 	}
 
-	// Track posts from query loops (either approach) or the main query.
+	// Query loop blocks are flagged out of band so that nothing this plugin
+	// adds ends up in the query's cache key; the main query still uses a query
+	// var, which is unique to that request anyway.
+	$context = DeferredExclusions\get_context( $query );
+
+	if ( null === $context && ! $query->get( 'hm_query_loop_collect_ids' ) ) {
+		return $posts;
+	}
+
+	// Runs at priority 10, after DeferredExclusions\filter_posts() has trimmed
+	// the over-fetched result set, so only posts that really render are tracked.
 	if ( ! empty( $posts ) ) {
 		$post_ids = wp_list_pluck( $posts, 'ID' );
 		add_displayed_post_ids( $post_ids );
-		add_query_loop_used_posts( $query->get( 'query_id', -1 ), $post_ids );
+		add_query_loop_used_posts( $context['query_id'] ?? $query->get( 'query_id', -1 ), $post_ids );
 	}
+
+	DeferredExclusions\release_context( $query );
 
 	return $posts;
 }
