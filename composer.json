@@ -5,11 +5,23 @@
 	"require": {
 		"composer/installers": "^1 || ^2"
 	},
+	"require-dev": {
+		"humanmade/coding-standards": "^2.3"
+	},
 	"license": "GPL-2.0-or-later",
 	"authors": [
 		{
 			"name": "Human Made Limited",
 			"email": "engineering@humanmade.com"
 		}
-	]
+	],
+	"scripts": {
+		"lint": "phpcs"
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
 }
