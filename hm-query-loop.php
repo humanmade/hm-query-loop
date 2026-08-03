@@ -308,7 +308,7 @@ function pre_render_block( $pre_render, $parsed_block ) {
 
 	$attrs = $parsed_block['attrs'] ?? [];
 
-	if ( ! $attrs['query']['inherit'] ?? false ) {
+	if ( ! ( $attrs['query']['inherit'] ?? false ) ) {
 		return $pre_render;
 	}
 
