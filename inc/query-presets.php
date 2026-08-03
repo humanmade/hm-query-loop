@@ -36,7 +36,7 @@ function register_query_preset( string $name, string $label, callable $callback 
 			sprintf(
 				/* translators: %s: preset name */
 				esc_html__( 'Query preset "%s" is already registered.', 'hm-query-loop' ),
-				$name
+				esc_attr( $name )
 			),
 			'1.0.0'
 		);
