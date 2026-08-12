@@ -11,6 +11,10 @@ permissions:
 jobs:
     build-and-preview:
         runs-on: ubuntu-latest
+        # Only run for same-repo pull requests. Fork PRs receive a read-only
+        # GITHUB_TOKEN, so the push to the pr-<n>-built branch (which needs
+        # contents: write) would hard-fail rather than be gracefully skipped.
+        if: github.event.pull_request.head.repo.full_name == github.repository
         steps:
             - name: Checkout
               uses: actions/checkout@v4
@@ -25,27 +29,37 @@ jobs:
               run: npm i
 
             - name: Replace version with PR info
+              # PR_NUMBER is passed as an environment variable so it reaches the
+              # shell as data, never as source text. The PR title is deliberately
+              # NOT used: it is attacker-controlled and interpolating it into this
+              # script (directly, or via sed's replacement metacharacters) would
+              # allow command injection on the runner.
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
               run: |
-                  # Create PR version string
-                  PR_VERSION="Pull Request #${{ github.event.pull_request.number }} - ${{ github.event.pull_request.title }}"
+                  # Stamp a fixed, safe version string derived only from the PR number.
+                  sed -i "s/__VERSION__/0.0.0-pr${PR_NUMBER}/g" hm-query-loop.php
 
-                  # Replace __VERSION__ in plugin file
-                  sed -i "s/__VERSION__/$PR_VERSION/g" hm-query-loop.php
-
-                  echo "Updated plugin version to: $PR_VERSION"
-                  cat hm-query-loop.php | grep "Version:"
+                  echo "Updated plugin version to: 0.0.0-pr${PR_NUMBER}"
+                  grep "Version:" hm-query-loop.php
 
             - name: Build plugin
               run: npm run build
 
             - name: Push built files to PR branch
+              # These values are safe (numeric id / commit SHA), but they are still
+              # passed via env so that no ${{ }} expression is interpolated into a
+              # shell script anywhere in this workflow.
+              env:
+                  PR_NUMBER: ${{ github.event.pull_request.number }}
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               run: |
                   # Configure git
                   git config --local user.email "github-actions[bot]@users.noreply.github.com"
                   git config --local user.name "github-actions[bot]"
 
                   # Create and checkout a new branch for this PR's built files
-                  BRANCH_NAME="pr-${{ github.event.pull_request.number }}-built"
+                  BRANCH_NAME="pr-${PR_NUMBER}-built"
 
                   # Create/recreate the branch from current state
                   git checkout -B "$BRANCH_NAME"
@@ -58,7 +72,7 @@ jobs:
                   if git diff --staged --quiet; then
                     echo "No changes to commit"
                   else
-                    git commit -m "Build assets for PR #${{ github.event.pull_request.number }} (commit: ${{ github.event.pull_request.head.sha }})"
+                    git commit -m "Build assets for PR #${PR_NUMBER} (commit: ${HEAD_SHA})"
                     git push origin "$BRANCH_NAME" --force
                   fi
 
