@@ -27,6 +27,9 @@ define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 // Load query presets functionality.
 require_once HM_QUERY_LOOP_PATH . 'inc/query-presets.php';
 
+// Load sticky posts functionality.
+require_once HM_QUERY_LOOP_PATH . 'inc/sticky-posts.php';
+
 /**
  * Initialize the plugin.
  */
@@ -52,6 +55,9 @@ function init() {
 
 	// Initialize query presets functionality.
 	QueryPresets\init();
+
+	// Initialize sticky posts functionality.
+	StickyPosts\bootstrap();
 }
 
 add_action( 'init', __NAMESPACE__ . '\\init', 9 );
@@ -502,6 +508,14 @@ function modify_query_from_block_attrs( $query = [], $attrs = [] ) {
 		if ( ! empty( $displayed_ids ) ) {
 			$query = exclude_posts_from_query( $query, $displayed_ids );
 		}
+	}
+
+	// Carry pinned post IDs through to the ORDER BY clause. This is an
+	// ordering concern rather than a query var, so it is stashed on the query
+	// and read back in StickyPosts\apply_sticky_order().
+	$sticky_posts = StickyPosts\normalize_ids( $settings['stickyPosts'] ?? [] );
+	if ( ! empty( $sticky_posts ) ) {
+		$query[ StickyPosts\QUERY_VAR ] = $sticky_posts;
 	}
 
 	// Exclude already displayed posts for this loop if enabled.
