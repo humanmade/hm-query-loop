@@ -272,5 +272,12 @@ export function resetDatabase() {
 	wpCli(
 		`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`
 	);
+	// database.sql is a dump taken on one WordPress version, so it pins
+	// `db_version` to whatever that was. On any other version core treats the
+	// database as out of date and redirects every admin request to
+	// wp-admin/upgrade.php, which makes the login in global-setup.js time out
+	// before a single test runs. Upgrading keeps the fixture version-agnostic,
+	// and is a no-op when the versions already match.
+	wpCli( `wp core update-db` );
 	wpCli( `wp cache flush` );
 }
