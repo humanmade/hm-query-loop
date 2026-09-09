@@ -118,7 +118,11 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 ## Testing Environment
 
-Tests use `@wordpress/env` with WordPress 6.9, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+Tests use `@wordpress/env`, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+
+**Upstream versions are pinned deliberately.** `core` is pinned to an exact tag (`WordPress/WordPress#6.9.7`, not the `#6.9` branch) and Advanced Query Loop to an exact release zip. Floating refs let an upstream release break CI with no change in this repo, and make re-running an old green commit depend on the day it runs. When bumping a pin, expect to update any test that drives third-party UI.
+
+The scheduled `E2E (latest upstream)` workflow (`.github/workflows/e2e-latest.yml`) reuses the same Playwright job with those pins overridden to latest, so upstream drift shows up on a schedule instead of mid-PR. It never runs on pull requests, so it cannot block a merge; on failure it opens or comments on a single rolling issue.
 
 ## Important Implementation Notes
 

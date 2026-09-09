@@ -1,8 +1,8 @@
 {
-	"core": "WordPress/WordPress#6.9",
+	"core": "WordPress/WordPress#6.9.7",
 	"plugins": [
 		".",
-		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
+		"https://downloads.wordpress.org/plugin/advanced-query-loop.5.0.0.zip"
 	],
 	"themes": [ "WordPress/twentytwentyfour", "WordPress/twentytwentyfive" ],
 	"mappings": {

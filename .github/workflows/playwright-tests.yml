@@ -5,6 +5,16 @@ on:
         branches: [main, master, develop]
     pull_request:
         branches: [main, master, develop]
+    # Allows the scheduled `E2E (latest upstream)` workflow to reuse this job
+    # against unpinned WordPress core and Advanced Query Loop versions.
+    workflow_call:
+        inputs:
+            unpinned:
+                description: >-
+                    Ignore the versions pinned in .wp-env.json and run against
+                    the latest WordPress core and Advanced Query Loop releases.
+                type: boolean
+                default: false
 
 jobs:
     test:
@@ -32,6 +42,23 @@ jobs:
 
             - name: Install Playwright Browsers
               run: npx playwright install --with-deps chromium
+
+            # .wp-env.json pins core and Advanced Query Loop to exact versions so
+            # that re-running an old green commit stays green. This override
+            # deliberately un-pins them for the scheduled early-warning run.
+            - name: Un-pin upstream versions
+              if: inputs.unpinned
+              run: |
+                  cat > .wp-env.override.json <<'JSON'
+                  {
+                  	"core": null,
+                  	"plugins": [
+                  		".",
+                  		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
+                  	]
+                  }
+                  JSON
+                  cat .wp-env.override.json
 
             - name: Start WordPress environment
               run: npm run wp-env start
