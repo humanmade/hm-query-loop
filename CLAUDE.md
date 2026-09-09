@@ -39,6 +39,7 @@ The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/po
   hideOnPaged: boolean,             // Whether to hide on paginated pages
   excludeDisplayed: boolean,        // Whether to exclude displayed posts
   useElasticPress: boolean,         // Whether to route query through ElasticPress (only shown when EP is active)
+  stickyPosts: number[] | undefined // Post IDs pinned to the front, in order
 }
 ```
 

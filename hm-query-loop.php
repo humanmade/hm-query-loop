@@ -27,6 +27,9 @@ define( 'HM_QUERY_LOOP_URL', plugin_dir_url( __FILE__ ) );
 // Load query presets functionality.
 require_once HM_QUERY_LOOP_PATH . 'inc/query-presets.php';
 
+// Load sticky posts functionality.
+require_once HM_QUERY_LOOP_PATH . 'inc/sticky-posts.php';
+
 // Load PHP-side post exclusions.
 require_once HM_QUERY_LOOP_PATH . 'inc/deferred-exclusions.php';
 
@@ -55,6 +58,9 @@ function init() {
 
 	// Initialize query presets functionality.
 	QueryPresets\init();
+
+	// Initialize sticky posts functionality.
+	StickyPosts\bootstrap();
 
 	// Initialize PHP-side post exclusions.
 	DeferredExclusions\init();
@@ -327,7 +333,7 @@ function pre_render_block( $pre_render, $parsed_block ) {
 
 	$attrs = $parsed_block['attrs'] ?? [];
 
-	if ( ! $attrs['query']['inherit'] ?? false ) {
+	if ( ! ( $attrs['query']['inherit'] ?? false ) ) {
 		return $pre_render;
 	}
 
@@ -539,6 +545,16 @@ function modify_query_from_block_attrs( $query = [], $attrs = [], $query_id = nu
 	// Route query through ElasticPress if enabled and available.
 	if ( ! empty( $settings['useElasticPress'] ) && is_elasticpress_available() ) {
 		$query['ep_integrate'] = true;
+	}
+
+	// Carry pinned post IDs through to the ORDER BY clause. This is an
+	// ordering concern rather than a query var, so it is stashed on the query
+	// and read back in StickyPosts\apply_sticky_order(). Unlike this plugin's
+	// own bookkeeping it has to reach WP_Query, but it only repeats IDs that
+	// the ORDER BY already carries, so it adds no cache-key fragmentation.
+	$sticky_posts = StickyPosts\normalize_ids( $settings['stickyPosts'] ?? [] );
+	if ( ! empty( $sticky_posts ) ) {
+		$query[ StickyPosts\QUERY_VAR ] = $sticky_posts;
 	}
 
 	// Exclude posts shown by earlier query loops on this page.

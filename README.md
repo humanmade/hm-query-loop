@@ -47,6 +47,16 @@ Excluding posts with `post__not_in` gives every URL its own `WP_Query` cache ent
 
 This applies to the plugin's own exclusion setting, to core's `excludeCurrent` block attribute, and to anything added through the `hm_query_loop_deferred_exclusions` filter. See [Query caching](docs/query-caching.md) for the details and the trade-offs.
 
+### 8. Sticky Posts
+
+Pin a hand-picked, ordered set of posts to the front of a query loop. Selected posts render first, in the order chosen in the editor; everything else follows in whatever order the block's own settings produce.
+
+This is an *ordering* feature, not a filter. A post the query would not return anyway — wrong post type, excluded by a taxonomy filter, not published — is **not** pulled in by pinning it. "Which posts appear" stays the job of the query settings; this only decides what order they appear in.
+
+The ordering is applied in SQL via `posts_orderby` rather than by re-sorting results afterwards, so it composes correctly with `posts_per_page` and pagination: pinned posts lead the whole result set, not merely the page being rendered.
+
+**Known limitation:** Elasticsearch bypasses `posts_orderby`. A loop routed through ElasticPress (including via this plugin's own ElasticPress toggle) ignores pinning.
+
 ## Installation
 
 1. Upload the plugin to your `/wp-content/plugins/` directory
@@ -107,6 +117,7 @@ See [tests/e2e/README.md](tests/e2e/README.md) for more details on the test setu
    - **Hide on paginated pages**: Toggle to hide this block on page 2+
    - **Exclude already displayed posts**: Toggle to avoid showing duplicate posts
 4. For non-inherited queries with multiple Post Template blocks, select each `core/post-template` and set **Posts per template** to control how many posts each template shows
+5. To pin posts to the front, open the **Sticky Posts** panel, search for a post and select it. Use the arrows to reorder pinned posts, or **Unpin** to remove one
 
 ## Block Context
 
@@ -117,7 +128,8 @@ The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/po
 {
 	perPage: number | undefined,      // Custom posts per page value
 	hideOnPaged: boolean,             // Whether to hide on paginated pages
-	excludeDisplayed: boolean         // Whether to exclude displayed posts
+	excludeDisplayed: boolean,        // Whether to exclude displayed posts
+	stickyPosts: number[] | undefined // Post IDs pinned to the front, in order
 }
 ```
 

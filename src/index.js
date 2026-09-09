@@ -14,6 +14,7 @@ import {
 	Spinner,
 } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
+import StickyPostsControl from './sticky-posts-control';
 import {
 	createContext,
 	useContext,
@@ -381,6 +382,25 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 								}
 							/>
 						) }
+					</PanelBody>
+					<PanelBody
+						title={ __( 'Sticky Posts', 'hm-query-loop' ) }
+						initialOpen={ false }
+					>
+						<StickyPostsControl
+							query={ query }
+							stickyPosts={ hmQueryLoop.stickyPosts }
+							onChange={ ( nextIds ) => {
+								const { stickyPosts: _omit, ...rest } =
+									hmQueryLoop;
+								setAttributes( {
+									hmQueryLoop:
+										nextIds.length > 0
+											? { ...rest, stickyPosts: nextIds }
+											: rest,
+								} );
+							} }
+						/>
 					</PanelBody>
 				</InspectorControls>
 			</>

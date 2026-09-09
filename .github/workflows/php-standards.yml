@@ -1,0 +1,54 @@
+name: PHP Code Quality
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.php'
+      - 'phpcs.xml'
+      - 'composer.json'
+      - 'composer.lock'
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+    # Only run when PHP or the coding standards configuration change.
+    paths:
+      - '**.php'
+      - 'phpcs.xml'
+      - 'composer.json'
+      - 'composer.lock'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  phpcs:
+    name: PHPCS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: cs2pr
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --no-interaction --no-ansi
+
+      - name: Run PHPCS
+        id: phpcs
+        run: composer lint -- --report-full --report-checkstyle=phpcs-report.xml
+
+      - name: Annotate PR with PHPCS results
+        if: ${{ always() && steps.phpcs.outcome == 'failure' }}
+        run: cs2pr ./phpcs-report.xml
