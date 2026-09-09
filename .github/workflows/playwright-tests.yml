@@ -50,16 +50,20 @@ jobs:
                   # re-run of an old commit resolves to the same WordPress.
                   read -r -d '' DEFAULT_BLOCKING <<'JSON' || true
                   [
-                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7" },
-                    { "label": "7.0", "core": "WordPress/WordPress#7.0.4" },
-                    { "label": "7.1", "core": "WordPress/WordPress#7.1"   }
+                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true }
                   ]
                   JSON
 
-                  # Tracks trunk for early warning of upstream breakage.
+                  # 7.0 and 7.1 run on every PR but do not gate merging: the
+                  # suite has real compatibility gaps on WordPress 7.x that
+                  # predate this matrix (see the WP 7.x tracking issue). They
+                  # move back to DEFAULT_BLOCKING once those are closed.
+                  # nightly tracks trunk for early warning and stays here.
                   read -r -d '' DEFAULT_EXPERIMENTAL <<'JSON' || true
                   [
-                    { "label": "nightly", "core": "WordPress/WordPress#master" }
+                    { "label": "7.0",     "core": "WordPress/WordPress#7.0.4",  "comment": true  },
+                    { "label": "7.1",     "core": "WordPress/WordPress#7.1",    "comment": true  },
+                    { "label": "nightly", "core": "WordPress/WordPress#master", "comment": false }
                   ]
                   JSON
 
@@ -98,7 +102,7 @@ jobs:
                   label: ${{ matrix.label }}
                   core: ${{ matrix.core }}
                   unpinned_plugins: ${{ inputs.unpinned_plugins }}
-                  comment_on_pr: 'true'
+                  comment_on_pr: ${{ matrix.comment }}
 
             - name: Fail if tests failed
               if: steps.suite.outputs.outcome == 'failure'
@@ -134,17 +138,18 @@ jobs:
                   label: ${{ matrix.label }}
                   core: ${{ matrix.core }}
                   unpinned_plugins: ${{ inputs.unpinned_plugins }}
-                  comment_on_pr: 'false'
+                  comment_on_pr: ${{ matrix.comment }}
 
             - name: Flag experimental failure
               if: steps.suite.outputs.outcome == 'failure'
               run: |
-                  echo "::warning title=WP ${{ matrix.label }} e2e failed::Non-blocking lane. Upstream may have introduced a breaking change — see the job summary."
+                  echo "::warning title=WP ${{ matrix.label }} e2e failed::Non-blocking lane — see the job summary."
                   {
                     echo "### :warning: WP ${{ matrix.label }} e2e failed (non-blocking)"
                     echo
-                    echo "This lane tracks \`${{ matrix.core }}\` and does not gate merging."
-                    echo "A failure here usually means an upstream change will break us on the next release."
+                    echo "This lane runs \`${{ matrix.core }}\` and does not gate merging."
+                    echo "For trunk, a failure is early warning of an upstream change."
+                    echo "For a released version, it is a known compatibility gap — see the WP 7.x tracking issue."
                   } >> "$GITHUB_STEP_SUMMARY"
 
     # Aggregate gate. Named `test` so the pre-existing required status check

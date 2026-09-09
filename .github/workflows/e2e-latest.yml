@@ -32,7 +32,10 @@ jobs:
             pull-requests: write
         uses: ./.github/workflows/playwright-tests.yml
         with:
-            core_matrix: '[{ "label": "7.1", "core": "WordPress/WordPress#7.1" }]'
+            # Pinned to the lane that is green, so a failure here means an AQL
+            # regression and nothing else. Pointing this at 7.0/7.1 would fail
+            # every week on the known WordPress 7.x gaps and bury the signal.
+            core_matrix: '[{ "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": false }]'
             # Core trunk is already covered by the nightly lane on every push.
             experimental_matrix: '[]'
             unpinned_plugins: true

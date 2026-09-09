@@ -131,11 +131,13 @@ Tests use `@wordpress/env`, configured in `.wp-env.json`. The environment includ
 | Lane | Core | Job | Blocking |
 | --- | --- | --- | --- |
 | `6.9` | `WordPress/WordPress#6.9.7` | `e2e` | yes |
-| `7.0` | `WordPress/WordPress#7.0.4` | `e2e` | yes |
-| `7.1` | `WordPress/WordPress#7.1` | `e2e` | yes |
+| `7.0` | `WordPress/WordPress#7.0.4` | `e2e-experimental` | no |
+| `7.1` | `WordPress/WordPress#7.1` | `e2e-experimental` | no |
 | `nightly` | `WordPress/WordPress#master` | `e2e-experimental` | no |
 
-The `nightly` lane deliberately tracks trunk for early warning; a failure surfaces as a `::warning::` annotation and a job summary.
+A failure in a non-blocking lane surfaces as a `::warning::` annotation and a job summary. For `nightly` that is early warning of an upstream change; for `7.0`/`7.1` it is a known compatibility gap.
+
+**7.0 and 7.1 are non-blocking only until the WordPress 7.x gaps are closed.** They run on every PR and report, but the suite genuinely fails on 7.x — the plugin's `core/query` inspector panels are not found in the 7.x site editor, and 7.1 additionally fails `multiple-post-templates` and a *frontend* preset assertion that cannot be a selector problem. Move them back into `DEFAULT_BLOCKING` in the `lanes` job once that is fixed. Lanes carry a `comment` flag so `nightly` stays out of the PR thread while the released versions report into it.
 
 Three structural points, each of which fixes a bug that actually happened:
 
