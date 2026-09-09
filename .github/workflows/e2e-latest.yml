@@ -1,0 +1,78 @@
+name: E2E (latest AQL)
+
+# Early warning for third-party plugin drift.
+#
+# .wp-env.json pins Advanced Query Loop to an exact release so that PR CI is
+# reproducible and re-running an old green commit stays green. The trade-off is
+# that a breaking AQL release is invisible until someone bumps the pin — which
+# is exactly how AQL 5.0.0 broke the suite. This runs the suite against AQL's
+# latest release on a schedule, so we find out on our own time.
+#
+# The WordPress core axis is not covered here: the main Playwright matrix
+# already runs a non-blocking `nightly` lane against core trunk on every push.
+# So this pins core to current stable and varies only the plugin.
+#
+# It never runs on pull requests, so a failure here cannot block a merge.
+
+on:
+    schedule:
+        # 05:00 UTC every Monday.
+        - cron: '0 5 * * 1'
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}
+    cancel-in-progress: true
+
+jobs:
+    e2e:
+        name: Playwright
+        permissions:
+            contents: read
+            pull-requests: write
+        uses: ./.github/workflows/playwright-tests.yml
+        with:
+            # Pinned to the lane that is green, so a failure here means an AQL
+            # regression and nothing else. Pointing this at 7.0/7.1 would fail
+            # every week on the known WordPress 7.x gaps and bury the signal.
+            core_matrix: '[{ "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": false }]'
+            # Core trunk is already covered by the nightly lane on every push.
+            experimental_matrix: '[]'
+            unpinned_plugins: true
+
+    report:
+        name: Report drift
+        needs: e2e
+        if: failure() && github.event_name == 'schedule'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            issues: write
+        steps:
+            - name: Open or update the drift issue
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  GH_REPO: ${{ github.repository }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  set -euo pipefail
+
+                  title='E2E suite fails against the latest Advanced Query Loop'
+                  body=$(printf '%s\n' \
+                    'The scheduled `E2E (latest AQL)` run failed.' \
+                    '' \
+                    'The suite passes against the Advanced Query Loop version pinned in' \
+                    '`.wp-env.json` but fails against its latest release, so bumping that pin' \
+                    'will break PR CI until the suite is updated.' \
+                    '' \
+                    "Failing run: ${RUN_URL}")
+
+                  # One rolling issue rather than one per week.
+                  existing=$(gh issue list --state open --search "$title in:title" \
+                    --json number --jq '.[0].number // empty')
+
+                  if [ -n "$existing" ]; then
+                    gh issue comment "$existing" --body "$body"
+                  else
+                    gh issue create --title "$title" --body "$body"
+                  fi
