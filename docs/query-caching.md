@@ -105,8 +105,8 @@ Three sources feed it:
 the WordPress version. Core trunk applies it in
 `build_query_vars_from_query_block()` by appending `get_the_ID()` to
 `post__not_in`; the plugin takes that ID back out and handles it in PHP, so no
-configuration is needed to get the improvement. **WordPress 6.9 and earlier have
-no `excludeCurrent` support at all** — core ignores the attribute. There the
+configuration is needed to get the improvement. **WordPress 7.0 and earlier have
+no `excludeCurrent` support at all** — it landed in 7.1 — core ignores the attribute. There the
 plugin does not take anything over, it implements the setting: a loop whose
 block attributes carry `excludeCurrent` starts excluding the current post where
 previously the attribute did nothing. That is the intended behaviour of the
@@ -199,64 +199,78 @@ And for query presets, which would otherwise reach for `post__not_in`:
 
 ## Measured
 
-Benchmarked against the commit this branch merges (`b9f3925`) on WordPress 6.9,
-PHP 8.4, MariaDB on the same host, Twenty Twenty-Five, 601 posts across six
-categories. Each "URL" is a full block render with the object cache persisting
-between renders, which is what a persistent object cache does between requests
-on a site whose content is not being edited.
+Benchmarked against the commit this branch merges (`b9f3925`), on **WordPress
+6.9 and 7.1**, PHP 8.4, MariaDB on the same host, Twenty Twenty-Five, 601 posts
+across six categories. Each "URL" is a full block render with the object cache
+persisting between renders, which is what a persistent object cache does between
+requests on a site whose content is not being edited.
 
-**A magazine-style page — 12 query loops, two of them split across multiple post
-templates, most excluding what earlier loops showed — rendered on 40 URLs:**
+**A single query loop with no plugin settings at all, across 100 URLs:**
 
-| | before | after |
-|---|---|---|
-| Database queries | 1263 | **72** |
-| Query-loop `SELECT`s executed | 1201 | **23** |
-| Render time | 50.4 ms/URL | **34.5 ms/URL** |
-| Posts rendered | 2720 | 2720 (identical, post for post) |
+| | WP 6.9 before | WP 6.9 after | WP 7.1 before | WP 7.1 after |
+|---|---|---|---|---|
+| Database queries | 308 | **110** | 306 | **108** |
+| Query-loop `SELECT`s executed | 201 | **3** | 201 | **3** |
+| Render time (ms/URL) | 3.94 | **2.92** | 4.61 | **3.38** |
 
-**A single query loop with no plugin settings at all, rendered on 100 URLs:**
-
-| | before | after |
-|---|---|---|
-| Database queries | 306 | **108** |
-| Query-loop `SELECT`s executed | 201 | **3** |
-| Render time | 4.38 ms/URL | **3.34 ms/URL** |
-
-That second table is the one worth reading twice. The loop has no exclusion
-settings, so none of the over-fetching machinery is doing anything — the entire
-gain is [the plugin no longer leaking `query_id` into the cache key](#3-nothing-the-plugin-tracks-reaches-the-cache-key).
+That table is the one worth reading twice. The loop has no exclusion settings, so
+none of the over-fetching machinery is doing anything — the entire gain is
+[the plugin no longer leaking `query_id` into the cache key](#3-nothing-the-plugin-tracks-reaches-the-cache-key).
 Because `query_id` is derived from the post ID, *every* query loop the plugin
 touched previously got a private cache entry on every URL it rendered on. Three
 distinct queries were being re-executed 201 times purely because their keys
 differed.
 
+**A magazine-style page — 12 query loops, two of them split across multiple post
+templates, most excluding what earlier loops showed — across 40 URLs:**
+
+| | WP 6.9 before | WP 6.9 after | WP 7.1 before | WP 7.1 after |
+|---|---|---|---|---|
+| Database queries | 1263 | **72** | 1261 | **70** |
+| Query-loop `SELECT`s executed | 1201 | **23** | 1201 | **23** |
+| Render time (ms/URL) | 55.3 | **36.4** | 56.1 | **38.3** |
+| Posts rendered | 2720 | 2720 | 2720 | 2720 |
+
 **Cost, where there is no cache benefit to be had** — one cold render of the
-12-loop page against an empty cache, which is the worst case for the
-over-fetching:
+12-loop page against an empty cache, the worst case for the over-fetching, 15–20
+interleaved runs per build:
 
-| | before | after |
+| | WP 6.9 before | WP 6.9 after | WP 7.1 before | WP 7.1 after |
+|---|---|---|---|---|
+| Database queries | 87 | 66 | 87 | 66 |
+| Render time | 74.9 ms | 73.8 ms | 77.9 ms | 76.6 ms |
+
+The extra rows and the per-request PHP filtering do not show up above the noise,
+and the query count still falls because the post templates share one query.
+
+**Rendered output**, compared post by post across 25 URLs per fixture:
+
+| Fixture | WP 6.9 | WP 7.1 |
 |---|---|---|
-| Database queries | 87 | 66 |
-| Render time | 74.9 ms | 73.8 ms |
+| 12-loop page | identical | identical |
+| Plain loop | identical | identical |
+| Loop with `excludeCurrent` | **differs on 5 of 25** | identical |
 
-The extra rows and the per-request PHP filtering do not show up above the noise
-(20 runs each, interleaved), and the query count still falls because the post
-templates share one query.
+The one divergence is the `excludeCurrent` version difference described above: on
+6.9 (and any core up to 7.0) core ignores the attribute, so `before` leaves the current post in its own
+"more like this" list and `after` removes it. The URLs that differ are exactly
+those where the current post fell inside the window. On 7.1, where core
+implements the attribute, the change is output-identical.
 
-**The admin editor is unaffected**, as expected — no editor JavaScript changed
-(the built bundle is byte-identical), and `query_loop_block_query_vars` does not
-fire there. Medians of 15 requests, two rounds:
+**The admin editor is unaffected** on both versions, as expected — no editor
+JavaScript changed (the built bundle is byte-identical), and
+`query_loop_block_query_vars` does not fire there. Medians of 15 requests, two
+rounds each, reported as a range across rounds:
 
-| | before | after |
-|---|---|---|
-| Block editor (`post.php`) | 218–235 ms | 215–221 ms |
-| Posts list (`edit.php`) | 61–65 ms | 62–63 ms |
-| Site editor | 117–125 ms | 121–125 ms |
-| REST `wp/v2/posts` (loop preview) | 28–30 ms | 28 ms |
+| | WP 6.9 before | WP 6.9 after | WP 7.1 before | WP 7.1 after |
+|---|---|---|---|---|
+| Block editor (`post.php`) | 218–235 ms | 215–221 ms | 257–265 ms | 251–252 ms |
+| Posts list (`edit.php`) | 61–65 ms | 62–63 ms | 72–74 ms | 71–76 ms |
+| Site editor | 117–125 ms | 121–125 ms | 138–139 ms | 131–145 ms |
+| REST `wp/v2/posts` (loop preview) | 28–30 ms | 28 ms | 41–43 ms | 38–40 ms |
 
-Every gap there is smaller than the spread between the two rounds of the
-*same* build, so none of it is a real difference.
+Every gap there is smaller than the spread between two rounds of the *same*
+build, so none of it is a real difference.
 
 ## Not done yet
 
