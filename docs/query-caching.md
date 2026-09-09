@@ -97,20 +97,24 @@ Three sources feed it:
 
 | Source | Varies by |
 |---|---|
-| Core's own `query.excludeCurrent` block attribute | URL — the worst case |
+| The `query.excludeCurrent` block attribute | URL — the worst case |
 | This plugin's **Exclude already displayed posts** setting | Position on the page |
 | The `hm_query_loop_deferred_exclusions` filter | Whatever you want |
 
 `excludeCurrent` needs a word of explanation, because what it does depends on
-the WordPress version. Core trunk applies it in
-`build_query_vars_from_query_block()` by appending `get_the_ID()` to
-`post__not_in`; the plugin takes that ID back out and handles it in PHP, so no
-configuration is needed to get the improvement. **WordPress 7.0 and earlier have
-no `excludeCurrent` support at all** — it landed in 7.1 — core ignores the attribute. There the
-plugin does not take anything over, it implements the setting: a loop whose
-block attributes carry `excludeCurrent` starts excluding the current post where
-previously the attribute did nothing. That is the intended behaviour of the
-setting, but it is a behaviour change on those versions, not just a caching one.
+the WordPress version. **Core gained the attribute in 7.1**; 7.0 and earlier
+ignore it entirely.
+
+From 7.1, core applies it in `build_query_vars_from_query_block()` by appending
+`get_the_ID()` to `post__not_in`. The plugin takes that ID back out and handles
+it in PHP, so no configuration is needed to get the improvement, and the
+rendered output is unchanged.
+
+On 7.0 and earlier the plugin is not taking anything over — it is implementing
+the setting. A loop whose block attributes carry `excludeCurrent` starts
+excluding the current post where the attribute previously did nothing. That is
+what the setting is supposed to do, but on those versions it is a behaviour
+change and not only a caching one.
 
 ### 2. Post templates share one query
 
