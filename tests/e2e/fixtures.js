@@ -88,9 +88,39 @@ export const test = base.extend( {
 
 			/**
 			 * Open the settings sidebar and wait for it to be ready.
+			 *
+			 * editor.openDocumentSettingsSidebar() insists on a header button
+			 * named exactly "Settings" inside the "Editor top bar" region. That
+			 * button is not reachable in the site editor on WordPress 7.x, so
+			 * every test that opened the sidebar there timed out while the same
+			 * tests passed in the post editor. Check whether the sidebar is
+			 * already open first, and fall back to any Settings toggle if the
+			 * core helper cannot find its own.
 			 */
 			async openSettingsSidebar() {
-				await editor.openDocumentSettingsSidebar();
+				const settingsRegion = page.getByRole( 'region', {
+					name: 'Editor settings',
+				} );
+
+				if (
+					await settingsRegion
+						.isVisible( { timeout: 2000 } )
+						.catch( () => false )
+				) {
+					await page.waitForTimeout( 1000 );
+					return;
+				}
+
+				try {
+					await editor.openDocumentSettingsSidebar();
+				} catch ( error ) {
+					await page
+						.getByRole( 'button', { name: 'Settings' } )
+						.first()
+						.click();
+					await settingsRegion.waitFor( { timeout: 15000 } );
+				}
+
 				await page.waitForTimeout( 1000 );
 			},
 
