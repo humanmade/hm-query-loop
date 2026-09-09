@@ -1,0 +1,127 @@
+name: Run e2e suite
+description: >-
+    Build the plugin, boot wp-env against a given WordPress core, and run the
+    Playwright suite. Shared by the blocking and experimental matrix jobs so
+    the two cannot drift apart.
+
+inputs:
+    label:
+        description: Short lane name, used in artifact names (e.g. "7.1").
+        required: true
+    core:
+        description: wp-env core source for this lane (e.g. WordPress/WordPress#7.1).
+        required: true
+    unpinned_plugins:
+        description: >-
+            When "true", ignore the Advanced Query Loop version pinned in
+            .wp-env.json and use its latest release.
+        required: false
+        default: 'false'
+    comment_on_pr:
+        description: Whether to leave a sticky Playwright report comment on the PR.
+        required: false
+        default: 'false'
+
+outputs:
+    outcome:
+        description: '"success" or "failure" — whether the Playwright run passed.'
+        value: ${{ steps.tests.outputs.outcome }}
+
+runs:
+    using: composite
+    steps:
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+              node-version: 24
+              cache: 'npm'
+
+        - name: Install dependencies
+          shell: bash
+          run: npm i
+
+        - name: Build plugin
+          shell: bash
+          run: npm run build
+
+        - name: Install Playwright Browsers
+          shell: bash
+          run: npx playwright install --with-deps chromium
+
+        # .wp-env.json pins Advanced Query Loop so that re-running an old green
+        # commit stays green. This override deliberately un-pins it for the
+        # scheduled early-warning run. Core is not touched here — it comes from
+        # WP_ENV_CORE below.
+        - name: Un-pin Advanced Query Loop
+          if: inputs.unpinned_plugins == 'true'
+          shell: bash
+          run: |
+              cat > .wp-env.override.json <<'JSON'
+              {
+              	"plugins": [
+              		".",
+              		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
+              	]
+              }
+              JSON
+              cat .wp-env.override.json
+
+        - name: Start WordPress environment
+          shell: bash
+          env:
+              WP_ENV_CORE: ${{ inputs.core }}
+          run: npm run wp-env start
+
+        - name: Wait for WordPress to be ready
+          shell: bash
+          run: |
+              timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
+              sleep 5
+
+        - name: Debug - Check WordPress status
+          shell: bash
+          run: |
+              curl -I http://localhost:8889 || echo "WordPress not responding"
+              docker ps
+              # Confirms the lane really is running the core it claims to,
+              # rather than every lane silently testing the same version.
+              npx wp-env run tests-cli wp core version || true
+
+        # continue-on-error is not available to composite steps, so record the
+        # outcome by hand and let the caller decide whether it is fatal.
+        - name: Run Playwright tests
+          id: tests
+          shell: bash
+          env:
+              CI: true
+          run: |
+              if npm run test:e2e; then
+                echo "outcome=success" >> "$GITHUB_OUTPUT"
+              else
+                echo "outcome=failure" >> "$GITHUB_OUTPUT"
+              fi
+
+        - name: Stop WordPress environment
+          if: always()
+          shell: bash
+          run: npm run wp-env stop || true
+
+        - name: Upload test results
+          uses: actions/upload-artifact@v4
+          if: always()
+          with:
+              name: playwright-report-wp-${{ inputs.label }}
+              path: test-results/
+              retention-days: 30
+              if-no-files-found: ignore
+
+        - name: Comment PR with test results
+          uses: daun/playwright-report-comment@v3
+          if: always() && github.event_name == 'pull_request'
+          continue-on-error: true
+          with:
+              report-file: test-results/results.json
+              report-tag: wp-${{ inputs.label }}
+              comment-title: 'Playwright test results — WP ${{ inputs.label }}'
+              create-comment: ${{ inputs.comment_on_pr }}
+              job-summary: true

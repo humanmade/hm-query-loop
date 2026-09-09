@@ -118,7 +118,36 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 ## Testing Environment
 
-Tests use `@wordpress/env` with WordPress 6.9, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+Tests use `@wordpress/env`, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
+
+**Upstream versions are pinned deliberately.** Pins are exact tags/releases, never branches: floating refs let an upstream release break CI with no change in this repo, and make re-running an old green commit depend on the day it runs. When bumping a pin, expect to update any test that drives third-party UI.
+
+`.wp-env.json` holds the local development default (current stable core, plus the pinned Advanced Query Loop release). CI overrides only the core axis per matrix lane via the `WP_ENV_CORE` environment variable, which takes precedence over `.wp-env.json` for both the dev and tests environments.
+
+### CI matrix
+
+`.github/workflows/playwright-tests.yml` runs the suite across WordPress versions. Lanes are defined as JSON in the `lanes` job, so a caller can narrow them without duplicating anything:
+
+| Lane | Core | Job | Blocking |
+| --- | --- | --- | --- |
+| `6.9` | `WordPress/WordPress#6.9.7` | `e2e` | yes |
+| `7.0` | `WordPress/WordPress#7.0.4` | `e2e-experimental` | no |
+| `7.1` | `WordPress/WordPress#7.1` | `e2e-experimental` | no |
+| `nightly` | `WordPress/WordPress#master` | `e2e-experimental` | no |
+
+A failure in a non-blocking lane surfaces as a `::warning::` annotation and a job summary. For `nightly` that is early warning of an upstream change; for `7.0`/`7.1` it is a known compatibility gap.
+
+**7.0 and 7.1 are non-blocking only until the WordPress 7.x gaps are closed.** They run on every PR and report, but the suite genuinely fails on 7.x — the plugin's `core/query` inspector panels are not found in the 7.x site editor, and 7.1 additionally fails `multiple-post-templates` and a *frontend* preset assertion that cannot be a selector problem. Move them back into `DEFAULT_BLOCKING` in the `lanes` job once that is fixed. Lanes carry a `comment` flag so `nightly` stays out of the PR thread while the released versions report into it.
+
+Three structural points, each of which fixes a bug that actually happened:
+
+- **Experimental lanes are a separate job, deliberately excluded from the aggregate's `needs`.** When trunk shared the blocking matrix, *any* failure in it — including an infrastructure blip in `wp-env start` — dragged the matrix result down and blocked the PR. Exempting only the test step is not enough; the lane has to be out of the gate entirely.
+- **The aggregate job id is `test`.** That is the name branch protection resolves; the per-version lanes publish names (`WP 7.1`) it does not know about. Renaming or removing that job silently strands any required status check.
+- **Steps live in a composite action** (`.github/actions/e2e-suite`) shared by both jobs, so the blocking and experimental paths cannot drift. `continue-on-error` is unavailable to composite steps, so the suite records its own `outcome` output and each caller decides whether that is fatal. Artifact names and report tags are per lane, because `upload-artifact@v4` rejects duplicate names.
+
+### Scheduled canary
+
+The scheduled `E2E (latest AQL)` workflow (`.github/workflows/e2e-latest.yml`) reuses the same Playwright job with a single pinned-core lane and Advanced Query Loop un-pinned, so a breaking AQL release shows up on a schedule instead of mid-PR (which is exactly how AQL 5.0.0 broke the suite). Core trunk is not covered there because the `nightly` matrix lane already does it on every push. It never runs on pull requests, so it cannot block a merge; on failure it opens or comments on a single rolling issue.
 
 ## Important Implementation Notes
 

@@ -5,82 +5,166 @@ on:
         branches: [main, master, develop]
     pull_request:
         branches: [main, master, develop]
+    # Reused by the scheduled `E2E (latest AQL)` workflow, which runs a single
+    # lane against an un-pinned Advanced Query Loop.
+    workflow_call:
+        inputs:
+            core_matrix:
+                description: >-
+                    JSON array of blocking lanes, each { label, core }.
+                    Defaults to the supported-versions matrix.
+                type: string
+                default: ''
+            experimental_matrix:
+                description: >-
+                    JSON array of non-blocking lanes, each { label, core }.
+                    Pass '[]' to run none. Defaults to WordPress trunk.
+                type: string
+                default: ''
+            unpinned_plugins:
+                description: >-
+                    Ignore the Advanced Query Loop version pinned in
+                    .wp-env.json and use its latest release instead.
+                type: boolean
+                default: false
 
 jobs:
-    test:
+    # Lanes live here rather than inline so a caller can narrow them without
+    # duplicating the jobs below.
+    lanes:
+        name: Resolve matrix
+        runs-on: ubuntu-latest
+        outputs:
+            blocking: ${{ steps.resolve.outputs.blocking }}
+            experimental: ${{ steps.resolve.outputs.experimental }}
+        steps:
+            - name: Resolve lanes
+              id: resolve
+              env:
+                  BLOCKING_OVERRIDE: ${{ inputs.core_matrix }}
+                  EXPERIMENTAL_OVERRIDE: ${{ inputs.experimental_matrix }}
+              run: |
+                  set -euo pipefail
+
+                  # Core is pinned per lane to an exact tag, not a branch, so a
+                  # re-run of an old commit resolves to the same WordPress.
+                  read -r -d '' DEFAULT_BLOCKING <<'JSON' || true
+                  [
+                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true }
+                  ]
+                  JSON
+
+                  # 7.0 and 7.1 run on every PR but do not gate merging: the
+                  # suite has real compatibility gaps on WordPress 7.x that
+                  # predate this matrix (see the WP 7.x tracking issue). They
+                  # move back to DEFAULT_BLOCKING once those are closed.
+                  # nightly tracks trunk for early warning and stays here.
+                  read -r -d '' DEFAULT_EXPERIMENTAL <<'JSON' || true
+                  [
+                    { "label": "7.0",     "core": "WordPress/WordPress#7.0.4",  "comment": true  },
+                    { "label": "7.1",     "core": "WordPress/WordPress#7.1",    "comment": true  },
+                    { "label": "nightly", "core": "WordPress/WordPress#master", "comment": false }
+                  ]
+                  JSON
+
+                  blocking="${BLOCKING_OVERRIDE:-$DEFAULT_BLOCKING}"
+                  experimental="${EXPERIMENTAL_OVERRIDE:-$DEFAULT_EXPERIMENTAL}"
+
+                  echo "$blocking" | jq -e 'type == "array" and length > 0' > /dev/null
+                  echo "$experimental" | jq -e 'type == "array"' > /dev/null
+
+                  echo "blocking=$( echo "$blocking" | jq -c . )" >> "$GITHUB_OUTPUT"
+                  echo "experimental=$( echo "$experimental" | jq -c . )" >> "$GITHUB_OUTPUT"
+
+                  echo "$blocking" | jq -r '.[] | "blocking: \(.label) -> \(.core)"'
+                  echo "$experimental" | jq -r '.[] | "experimental: \(.label) -> \(.core)"'
+
+    e2e:
+        name: WP ${{ matrix.label }}
+        needs: lanes
         timeout-minutes: 60
         runs-on: ubuntu-latest
         permissions:
             contents: read
             pull-requests: write
-
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON( needs.lanes.outputs.blocking ) }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Run e2e suite
+              id: suite
+              uses: ./.github/actions/e2e-suite
               with:
-                  node-version: 24
-                  cache: 'npm'
-
-            - name: Install dependencies
-              run: npm i
-
-            - name: Build plugin
-              run: npm run build
-
-            - name: Install Playwright Browsers
-              run: npx playwright install --with-deps chromium
-
-            - name: Start WordPress environment
-              run: npm run wp-env start
-
-            - name: Wait for WordPress to be ready
-              run: |
-                  timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
-                  sleep 5
-
-            - name: Debug - Check WordPress status
-              run: |
-                  curl -I http://localhost:8889 || echo "WordPress not responding"
-                  docker ps
-
-            - name: Run Playwright tests
-              id: tests
-              continue-on-error: true
-              run: npm run test:e2e
-              env:
-                  CI: true
-
-            - name: Stop WordPress environment
-              if: always()
-              run: npm run wp-env stop
-
-            - name: Upload test results
-              uses: actions/upload-artifact@v4
-              if: always()
-              with:
-                  name: playwright-report
-                  path: test-results/
-                  retention-days: 30
-                  if-no-files-found: ignore
-
-            - name: Upload test videos and traces
-              uses: actions/upload-artifact@v4
-              if: failure()
-              with:
-                  name: test-results
-                  path: test-results/
-                  retention-days: 7
-                  if-no-files-found: ignore
-
-            - name: Comment PR with test results
-              uses: daun/playwright-report-comment@v3
-              if: always() && github.event_name == 'pull_request'
-              with:
-                  report-file: test-results/results.json
+                  label: ${{ matrix.label }}
+                  core: ${{ matrix.core }}
+                  unpinned_plugins: ${{ inputs.unpinned_plugins }}
+                  comment_on_pr: ${{ matrix.comment }}
 
             - name: Fail if tests failed
-              if: steps.tests.outcome == 'failure'
+              if: steps.suite.outputs.outcome == 'failure'
               run: exit 1
+
+    # Separate job, and deliberately NOT in the aggregate's `needs`. Keeping
+    # trunk in the same matrix meant any failure here — including an infra
+    # blip in wp-env start, which is what happened — dragged the whole matrix
+    # result down and blocked the PR. Isolating it makes "non-blocking"
+    # unconditional rather than dependent on which step failed.
+    e2e-experimental:
+        name: WP ${{ matrix.label }}
+        needs: lanes
+        if: needs.lanes.outputs.experimental != '[]'
+        timeout-minutes: 60
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        permissions:
+            contents: read
+            pull-requests: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON( needs.lanes.outputs.experimental ) }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Run e2e suite
+              id: suite
+              uses: ./.github/actions/e2e-suite
+              with:
+                  label: ${{ matrix.label }}
+                  core: ${{ matrix.core }}
+                  unpinned_plugins: ${{ inputs.unpinned_plugins }}
+                  comment_on_pr: ${{ matrix.comment }}
+
+            - name: Flag experimental failure
+              if: steps.suite.outputs.outcome == 'failure'
+              run: |
+                  echo "::warning title=WP ${{ matrix.label }} e2e failed::Non-blocking lane — see the job summary."
+                  {
+                    echo "### :warning: WP ${{ matrix.label }} e2e failed (non-blocking)"
+                    echo
+                    echo "This lane runs \`${{ matrix.core }}\` and does not gate merging."
+                    echo "For trunk, a failure is early warning of an upstream change."
+                    echo "For a released version, it is a known compatibility gap — see the WP 7.x tracking issue."
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+    # Aggregate gate. Named `test` so the pre-existing required status check
+    # keeps resolving: the per-version lanes publish names ("WP 7.1") that
+    # branch protection does not know about.
+    test:
+        name: test
+        needs: e2e
+        if: always()
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check lane results
+              env:
+                  RESULT: ${{ needs.e2e.result }}
+              run: |
+                  set -euo pipefail
+                  echo "Blocking lanes: $RESULT"
+                  [ "$RESULT" = "success" ]
