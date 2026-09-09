@@ -120,9 +120,28 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 Tests use `@wordpress/env`, configured in `.wp-env.json`. The environment includes TwentyTwentyFour and TwentyTwentyFive themes, and the Advanced Query Loop plugin. Tests run on port 8889 and use Playwright with `@wordpress/e2e-test-utils-playwright`.
 
-**Upstream versions are pinned deliberately.** `core` is pinned to an exact tag (`WordPress/WordPress#6.9.7`, not the `#6.9` branch) and Advanced Query Loop to an exact release zip. Floating refs let an upstream release break CI with no change in this repo, and make re-running an old green commit depend on the day it runs. When bumping a pin, expect to update any test that drives third-party UI.
+**Upstream versions are pinned deliberately.** Pins are exact tags/releases, never branches: floating refs let an upstream release break CI with no change in this repo, and make re-running an old green commit depend on the day it runs. When bumping a pin, expect to update any test that drives third-party UI.
 
-The scheduled `E2E (latest upstream)` workflow (`.github/workflows/e2e-latest.yml`) reuses the same Playwright job with those pins overridden to latest, so upstream drift shows up on a schedule instead of mid-PR. It never runs on pull requests, so it cannot block a merge; on failure it opens or comments on a single rolling issue.
+`.wp-env.json` holds the local development default (current stable core, plus the pinned Advanced Query Loop release). CI overrides only the core axis per matrix lane via the `WP_ENV_CORE` environment variable, which takes precedence over `.wp-env.json` for both the dev and tests environments.
+
+### CI matrix
+
+`.github/workflows/playwright-tests.yml` runs the suite across WordPress versions. The lanes are defined as JSON in the `lanes` job, so a caller can narrow them without duplicating the test job:
+
+| Lane | Core | Blocking |
+| --- | --- | --- |
+| `6.9` | `WordPress/WordPress#6.9.7` | yes |
+| `7.0` | `WordPress/WordPress#7.0.4` | yes |
+| `7.1` | `WordPress/WordPress#7.1` | yes |
+| `nightly` | `WordPress/WordPress#master` | no (`experimental: true`) |
+
+The `nightly` lane deliberately tracks trunk for early warning. It never fails its job, so trunk breakage cannot block a merge; a failure surfaces as a `::warning::` annotation and a job summary instead.
+
+An aggregate job named `test` gates on the blocking lanes only. **Keep that job id** — it is the name branch protection resolves; the per-version lanes publish names (`WP 7.1`) that branch protection does not know about.
+
+### Scheduled canary
+
+The scheduled `E2E (latest AQL)` workflow (`.github/workflows/e2e-latest.yml`) reuses the same Playwright job with a single pinned-core lane and Advanced Query Loop un-pinned, so a breaking AQL release shows up on a schedule instead of mid-PR (which is exactly how AQL 5.0.0 broke the suite). Core trunk is not covered there because the `nightly` matrix lane already does it on every push. It never runs on pull requests, so it cannot block a merge; on failure it opens or comments on a single rolling issue.
 
 ## Important Implementation Notes
 

@@ -1,12 +1,16 @@
-name: E2E (latest upstream)
+name: E2E (latest AQL)
 
-# Early warning for upstream drift.
+# Early warning for third-party plugin drift.
 #
-# .wp-env.json pins WordPress core and Advanced Query Loop to exact versions so
-# that PR CI is reproducible and re-running an old green commit stays green.
-# The trade-off is that a breaking upstream release is invisible until someone
-# bumps a pin. This workflow runs the same suite against the latest releases on
-# a schedule, so we find out on our own time instead of mid-PR.
+# .wp-env.json pins Advanced Query Loop to an exact release so that PR CI is
+# reproducible and re-running an old green commit stays green. The trade-off is
+# that a breaking AQL release is invisible until someone bumps the pin — which
+# is exactly how AQL 5.0.0 broke the suite. This runs the suite against AQL's
+# latest release on a schedule, so we find out on our own time.
+#
+# The WordPress core axis is not covered here: the main Playwright matrix
+# already runs a non-blocking `nightly` lane against core trunk on every push.
+# So this pins core to current stable and varies only the plugin.
 #
 # It never runs on pull requests, so a failure here cannot block a merge.
 
@@ -28,7 +32,8 @@ jobs:
             pull-requests: write
         uses: ./.github/workflows/playwright-tests.yml
         with:
-            unpinned: true
+            core_matrix: '[{ "label": "7.1", "core": "WordPress/WordPress#7.1", "experimental": false }]'
+            unpinned_plugins: true
 
     report:
         name: Report drift
@@ -47,13 +52,13 @@ jobs:
               run: |
                   set -euo pipefail
 
-                  title='E2E suite fails against latest WordPress / Advanced Query Loop'
+                  title='E2E suite fails against the latest Advanced Query Loop'
                   body=$(printf '%s\n' \
-                    'The scheduled `E2E (latest upstream)` run failed.' \
+                    'The scheduled `E2E (latest AQL)` run failed.' \
                     '' \
-                    'The suite passes against the versions pinned in `.wp-env.json` but fails' \
-                    'against the latest WordPress core and Advanced Query Loop releases, so' \
-                    'bumping those pins will break PR CI until the suite is updated.' \
+                    'The suite passes against the Advanced Query Loop version pinned in' \
+                    '`.wp-env.json` but fails against its latest release, so bumping that pin' \
+                    'will break PR CI until the suite is updated.' \
                     '' \
                     "Failing run: ${RUN_URL}")
 
