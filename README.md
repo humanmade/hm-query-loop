@@ -45,7 +45,7 @@ Register custom query configurations in PHP that can be selected from a dropdown
 
 Excluding posts with `post__not_in` gives every URL its own `WP_Query` cache entry, because the excluded IDs end up in the SQL the cache key is built from. For non-inherited query loops this plugin fetches a few extra posts instead and drops the unwanted ones in PHP, so "the latest 5 posts, excluding this one" is one cached query shared by every post on the site rather than one per post.
 
-This applies to the plugin's own exclusion setting, to core's `excludeCurrent` block attribute, and to anything added through the `hm_query_loop_deferred_exclusions` filter. See [Query caching](docs/query-caching.md) for the details and the trade-offs.
+This applies to the plugin's own exclusion setting, to the `excludeCurrent` block attribute, and to anything added through the `hm_query_loop_deferred_exclusions` filter. Note that WordPress 6.9 and earlier ignore `excludeCurrent` entirely, so on those versions this plugin implements the setting rather than merely making it cacheable. See [Query caching](docs/query-caching.md) for the details and the trade-offs.
 
 ### 8. Sticky Posts
 

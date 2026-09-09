@@ -173,9 +173,11 @@ function plan_query( $query, $block, $page = 1 ) {
 	$exclude = $context['exclude'] ?? [];
 	unset( $context['exclude'] );
 
-	// Core applies the block's own "exclude current post" setting by adding the
-	// post ID to `post__not_in`, which is the single biggest source of per-URL
-	// cache keys. Take it over.
+	// The block's own "exclude current post" setting. Core (after 6.9) applies
+	// it by adding the post ID to `post__not_in`, which is a per-URL cache key
+	// by construction; taking it over here keeps the query stable. On 6.9 and
+	// earlier core ignores the attribute entirely, so this is what makes the
+	// setting work at all.
 	if ( $block instanceof WP_Block && ! empty( $block->context['query']['excludeCurrent'] ) ) {
 		$current_post_id = get_the_ID();
 		if ( $current_post_id ) {

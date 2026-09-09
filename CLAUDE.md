@@ -68,7 +68,7 @@ The plugin handles two different query scenarios:
 `post__not_in` puts excluded IDs into the SQL, and `WP_Query` derives its `post-queries` cache key from the SQL, so a loop excluding the post being viewed gets a private cache entry on every URL. For non-inherited queries the plugin instead over-fetches by `count( $exclude )` and drops the posts in PHP on `the_posts` — which core runs *after* writing the result to the object cache, so the shareable superset is what gets cached.
 
 - `plan_query()` (`query_loop_block_query_vars`, priority 999 — after presets) turns recorded exclusions and post-template windows into a fetch plan
-- Sources: core's `query.excludeCurrent`, the plugin's `excludeDisplayed`, and the `hm_query_loop_deferred_exclusions` filter
+- Sources: the `query.excludeCurrent` block attribute (implemented by core only after 6.9 — on 6.9 and earlier this plugin is what makes it do anything), the plugin's `excludeDisplayed`, and the `hm_query_loop_deferred_exclusions` filter
 - `bind_context()` (`pre_get_posts`, priority 0) strips the plugin's state from the query vars before the cache key is generated, binding it to the `WP_Query` instance instead. **Any** custom query var reaches the cache key, so nothing this plugin tracks may be left in there
 - `filter_posts()` (`the_posts`, priority 9) applies the plan and corrects `found_posts`/`max_num_pages`; it runs before post tracking at priority 10
 - Falls back to SQL exclusion when the fetch would exceed `hm_query_loop_max_deferred_fetch` (default 100), when `hm_query_loop_defer_exclusions` is false, or when the query cannot reach `the_posts` (`fields => ids`, `suppress_filters`)
