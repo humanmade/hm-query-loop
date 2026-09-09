@@ -11,8 +11,14 @@ on:
         inputs:
             core_matrix:
                 description: >-
-                    JSON array of matrix lanes, each { label, core, experimental }.
-                    Defaults to the full supported-versions matrix.
+                    JSON array of blocking lanes, each { label, core }.
+                    Defaults to the supported-versions matrix.
+                type: string
+                default: ''
+            experimental_matrix:
+                description: >-
+                    JSON array of non-blocking lanes, each { label, core }.
+                    Pass '[]' to run none. Defaults to WordPress trunk.
                 type: string
                 default: ''
             unpinned_plugins:
@@ -23,39 +29,51 @@ on:
                 default: false
 
 jobs:
-    # The matrix lives here rather than inline so that a caller can narrow it
-    # to a single lane without duplicating the job below.
+    # Lanes live here rather than inline so a caller can narrow them without
+    # duplicating the jobs below.
     lanes:
         name: Resolve matrix
         runs-on: ubuntu-latest
         outputs:
-            matrix: ${{ steps.resolve.outputs.matrix }}
+            blocking: ${{ steps.resolve.outputs.blocking }}
+            experimental: ${{ steps.resolve.outputs.experimental }}
         steps:
             - name: Resolve lanes
               id: resolve
               env:
-                  OVERRIDE: ${{ inputs.core_matrix }}
+                  BLOCKING_OVERRIDE: ${{ inputs.core_matrix }}
+                  EXPERIMENTAL_OVERRIDE: ${{ inputs.experimental_matrix }}
               run: |
                   set -euo pipefail
 
                   # Core is pinned per lane to an exact tag, not a branch, so a
                   # re-run of an old commit resolves to the same WordPress.
-                  # `nightly` is the deliberate exception: it tracks trunk to
-                  # give early warning of upstream breakage, and is marked
-                  # experimental so it cannot block a merge.
-                  read -r -d '' DEFAULT <<'JSON' || true
+                  read -r -d '' DEFAULT_BLOCKING <<'JSON' || true
                   [
-                    { "label": "6.9",     "core": "WordPress/WordPress#6.9.7",  "experimental": false },
-                    { "label": "7.0",     "core": "WordPress/WordPress#7.0.4",  "experimental": false },
-                    { "label": "7.1",     "core": "WordPress/WordPress#7.1",    "experimental": false },
-                    { "label": "nightly", "core": "WordPress/WordPress#master", "experimental": true  }
+                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7" },
+                    { "label": "7.0", "core": "WordPress/WordPress#7.0.4" },
+                    { "label": "7.1", "core": "WordPress/WordPress#7.1"   }
                   ]
                   JSON
 
-                  lanes="${OVERRIDE:-$DEFAULT}"
-                  echo "$lanes" | jq -e 'type == "array" and length > 0' > /dev/null
-                  echo "matrix=$( echo "$lanes" | jq -c . )" >> "$GITHUB_OUTPUT"
-                  echo "$lanes" | jq -r '.[] | "lane: \(.label) -> \(.core) (experimental: \(.experimental))"'
+                  # Tracks trunk for early warning of upstream breakage.
+                  read -r -d '' DEFAULT_EXPERIMENTAL <<'JSON' || true
+                  [
+                    { "label": "nightly", "core": "WordPress/WordPress#master" }
+                  ]
+                  JSON
+
+                  blocking="${BLOCKING_OVERRIDE:-$DEFAULT_BLOCKING}"
+                  experimental="${EXPERIMENTAL_OVERRIDE:-$DEFAULT_EXPERIMENTAL}"
+
+                  echo "$blocking" | jq -e 'type == "array" and length > 0' > /dev/null
+                  echo "$experimental" | jq -e 'type == "array"' > /dev/null
+
+                  echo "blocking=$( echo "$blocking" | jq -c . )" >> "$GITHUB_OUTPUT"
+                  echo "experimental=$( echo "$experimental" | jq -c . )" >> "$GITHUB_OUTPUT"
+
+                  echo "$blocking" | jq -r '.[] | "blocking: \(.label) -> \(.core)"'
+                  echo "$experimental" | jq -r '.[] | "experimental: \(.label) -> \(.core)"'
 
     e2e:
         name: WP ${{ matrix.label }}
@@ -68,111 +86,58 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                include: ${{ fromJSON( needs.lanes.outputs.matrix ) }}
-
+                include: ${{ fromJSON( needs.lanes.outputs.blocking ) }}
         steps:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
+            - name: Run e2e suite
+              id: suite
+              uses: ./.github/actions/e2e-suite
               with:
-                  node-version: 24
-                  cache: 'npm'
-
-            - name: Install dependencies
-              run: npm i
-
-            - name: Build plugin
-              run: npm run build
-
-            - name: Install Playwright Browsers
-              run: npx playwright install --with-deps chromium
-
-            # .wp-env.json pins Advanced Query Loop so that re-running an old
-            # green commit stays green. This override deliberately un-pins it
-            # for the scheduled early-warning run. Core is not touched here —
-            # it comes from WP_ENV_CORE below.
-            - name: Un-pin Advanced Query Loop
-              if: inputs.unpinned_plugins
-              run: |
-                  cat > .wp-env.override.json <<'JSON'
-                  {
-                  	"plugins": [
-                  		".",
-                  		"https://downloads.wordpress.org/plugin/advanced-query-loop.zip"
-                  	]
-                  }
-                  JSON
-                  cat .wp-env.override.json
-
-            - name: Start WordPress environment
-              run: npm run wp-env start
-              env:
-                  WP_ENV_CORE: ${{ matrix.core }}
-
-            - name: Wait for WordPress to be ready
-              run: |
-                  timeout 60 bash -c 'until curl -sSf http://localhost:8889 > /dev/null 2>&1; do sleep 2; done' || echo "WordPress may not be fully ready"
-                  sleep 5
-
-            - name: Debug - Check WordPress status
-              run: |
-                  curl -I http://localhost:8889 || echo "WordPress not responding"
-                  docker ps
-                  # Confirms the lane really is running the core it claims to,
-                  # rather than every lane silently testing the same version.
-                  npx wp-env run tests-cli wp core version || true
-
-            - name: Run Playwright tests
-              id: tests
-              continue-on-error: true
-              run: npm run test:e2e
-              env:
-                  CI: true
-
-            - name: Stop WordPress environment
-              if: always()
-              run: npm run wp-env stop
-
-            - name: Upload test results
-              uses: actions/upload-artifact@v4
-              if: always()
-              with:
-                  name: playwright-report-wp-${{ matrix.label }}
-                  path: test-results/
-                  retention-days: 30
-                  if-no-files-found: ignore
-
-            - name: Upload test videos and traces
-              uses: actions/upload-artifact@v4
-              if: steps.tests.outcome == 'failure'
-              with:
-                  name: test-results-wp-${{ matrix.label }}
-                  path: test-results/
-                  retention-days: 7
-                  if-no-files-found: ignore
-
-            # Experimental lanes get a job summary only, to keep the PR thread
-            # to one sticky comment per blocking lane.
-            - name: Comment PR with test results
-              uses: daun/playwright-report-comment@v3
-              if: always() && github.event_name == 'pull_request'
-              with:
-                  report-file: test-results/results.json
-                  report-tag: wp-${{ matrix.label }}
-                  comment-title: 'Playwright test results — WP ${{ matrix.label }}'
-                  create-comment: ${{ !matrix.experimental }}
-                  job-summary: true
+                  label: ${{ matrix.label }}
+                  core: ${{ matrix.core }}
+                  unpinned_plugins: ${{ inputs.unpinned_plugins }}
+                  comment_on_pr: 'true'
 
             - name: Fail if tests failed
-              if: steps.tests.outcome == 'failure' && !matrix.experimental
+              if: steps.suite.outputs.outcome == 'failure'
               run: exit 1
 
-            # An experimental lane never fails the job, so that trunk breakage
-            # cannot block a merge. Surface it as an annotation instead.
+    # Separate job, and deliberately NOT in the aggregate's `needs`. Keeping
+    # trunk in the same matrix meant any failure here — including an infra
+    # blip in wp-env start, which is what happened — dragged the whole matrix
+    # result down and blocked the PR. Isolating it makes "non-blocking"
+    # unconditional rather than dependent on which step failed.
+    e2e-experimental:
+        name: WP ${{ matrix.label }}
+        needs: lanes
+        if: needs.lanes.outputs.experimental != '[]'
+        timeout-minutes: 60
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        permissions:
+            contents: read
+            pull-requests: write
+        strategy:
+            fail-fast: false
+            matrix:
+                include: ${{ fromJSON( needs.lanes.outputs.experimental ) }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Run e2e suite
+              id: suite
+              uses: ./.github/actions/e2e-suite
+              with:
+                  label: ${{ matrix.label }}
+                  core: ${{ matrix.core }}
+                  unpinned_plugins: ${{ inputs.unpinned_plugins }}
+                  comment_on_pr: 'false'
+
             - name: Flag experimental failure
-              if: steps.tests.outcome == 'failure' && matrix.experimental
+              if: steps.suite.outputs.outcome == 'failure'
               run: |
                   echo "::warning title=WP ${{ matrix.label }} e2e failed::Non-blocking lane. Upstream may have introduced a breaking change — see the job summary."
                   {
@@ -182,9 +147,9 @@ jobs:
                     echo "A failure here usually means an upstream change will break us on the next release."
                   } >> "$GITHUB_STEP_SUMMARY"
 
-    # Aggregate gate. Named `test` so that the pre-existing required status
-    # check keeps resolving: the per-version lanes publish names ("WP 7.1")
-    # that branch protection does not know about.
+    # Aggregate gate. Named `test` so the pre-existing required status check
+    # keeps resolving: the per-version lanes publish names ("WP 7.1") that
+    # branch protection does not know about.
     test:
         name: test
         needs: e2e

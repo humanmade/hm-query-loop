@@ -126,18 +126,22 @@ Tests use `@wordpress/env`, configured in `.wp-env.json`. The environment includ
 
 ### CI matrix
 
-`.github/workflows/playwright-tests.yml` runs the suite across WordPress versions. The lanes are defined as JSON in the `lanes` job, so a caller can narrow them without duplicating the test job:
+`.github/workflows/playwright-tests.yml` runs the suite across WordPress versions. Lanes are defined as JSON in the `lanes` job, so a caller can narrow them without duplicating anything:
 
-| Lane | Core | Blocking |
-| --- | --- | --- |
-| `6.9` | `WordPress/WordPress#6.9.7` | yes |
-| `7.0` | `WordPress/WordPress#7.0.4` | yes |
-| `7.1` | `WordPress/WordPress#7.1` | yes |
-| `nightly` | `WordPress/WordPress#master` | no (`experimental: true`) |
+| Lane | Core | Job | Blocking |
+| --- | --- | --- | --- |
+| `6.9` | `WordPress/WordPress#6.9.7` | `e2e` | yes |
+| `7.0` | `WordPress/WordPress#7.0.4` | `e2e` | yes |
+| `7.1` | `WordPress/WordPress#7.1` | `e2e` | yes |
+| `nightly` | `WordPress/WordPress#master` | `e2e-experimental` | no |
 
-The `nightly` lane deliberately tracks trunk for early warning. It never fails its job, so trunk breakage cannot block a merge; a failure surfaces as a `::warning::` annotation and a job summary instead.
+The `nightly` lane deliberately tracks trunk for early warning; a failure surfaces as a `::warning::` annotation and a job summary.
 
-An aggregate job named `test` gates on the blocking lanes only. **Keep that job id** — it is the name branch protection resolves; the per-version lanes publish names (`WP 7.1`) that branch protection does not know about.
+Three structural points, each of which fixes a bug that actually happened:
+
+- **Experimental lanes are a separate job, deliberately excluded from the aggregate's `needs`.** When trunk shared the blocking matrix, *any* failure in it — including an infrastructure blip in `wp-env start` — dragged the matrix result down and blocked the PR. Exempting only the test step is not enough; the lane has to be out of the gate entirely.
+- **The aggregate job id is `test`.** That is the name branch protection resolves; the per-version lanes publish names (`WP 7.1`) it does not know about. Renaming or removing that job silently strands any required status check.
+- **Steps live in a composite action** (`.github/actions/e2e-suite`) shared by both jobs, so the blocking and experimental paths cannot drift. `continue-on-error` is unavailable to composite steps, so the suite records its own `outcome` output and each caller decides whether that is fatal. Artifact names and report tags are per lane, because `upload-artifact@v4` rejects duplicate names.
 
 ### Scheduled canary
 

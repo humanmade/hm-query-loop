@@ -32,7 +32,9 @@ jobs:
             pull-requests: write
         uses: ./.github/workflows/playwright-tests.yml
         with:
-            core_matrix: '[{ "label": "7.1", "core": "WordPress/WordPress#7.1", "experimental": false }]'
+            core_matrix: '[{ "label": "7.1", "core": "WordPress/WordPress#7.1" }]'
+            # Core trunk is already covered by the nightly lane on every push.
+            experimental_matrix: '[]'
             unpinned_plugins: true
 
     report:
