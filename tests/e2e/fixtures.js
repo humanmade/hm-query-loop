@@ -121,6 +121,21 @@ export const test = base.extend( {
 					await settingsRegion.waitFor( { timeout: 15000 } );
 				}
 
+				// The sidebar can open on the Template/Document tab, which holds
+				// no block inspector controls — so every panel this plugin adds
+				// to core/query looks missing. The same panels render fine in the
+				// post editor on the same WordPress, which is what points at the
+				// tab rather than at the panels themselves.
+				const blockTab = page.getByRole( 'tab', { name: 'Block' } );
+				if (
+					await blockTab
+						.isVisible( { timeout: 2000 } )
+						.catch( () => false )
+				) {
+					await blockTab.click();
+					await page.waitForTimeout( 300 );
+				}
+
 				await page.waitForTimeout( 1000 );
 			},
 
