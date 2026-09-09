@@ -43,23 +43,7 @@ export const test = base.extend( {
 				);
 
 				// Dismiss "Edit your site" modal if it appears
-				const editSiteModalVisible = await page
-					.locator( 'text=Edit your site' )
-					.isVisible( { timeout: 2000 } )
-					.catch( () => false );
-
-				if ( editSiteModalVisible ) {
-					const getStartedButton = page.locator(
-						'button:has-text("Get started")'
-					);
-					const isGetStartedVisible = await getStartedButton
-						.isVisible( { timeout: 1000 } )
-						.catch( () => false );
-					if ( isGetStartedVisible ) {
-						await getStartedButton.click();
-						await page.waitForTimeout( 500 );
-					}
-				}
+				await this.dismissEditSiteTour();
 
 				// Close welcome guide if it appears
 				const welcomeGuideVisible = await page
@@ -87,6 +71,39 @@ export const test = base.extend( {
 			},
 
 			/**
+			 * Dismiss the "Edit your site" site editor tour, if present.
+			 *
+			 * On WordPress 7.x this can appear on first page load (already
+			 * handled in visitSiteEditor()) but also reappears later, on
+			 * demand, the first time certain interactions happen — e.g.
+			 * opening the settings sidebar or entering pattern-editing mode.
+			 * It sits on top of everything, so any click underneath it times
+			 * out instead of failing fast.
+			 */
+			async dismissEditSiteTour() {
+				const editSiteModalVisible = await page
+					.locator( 'text=Edit your site' )
+					.isVisible( { timeout: 1000 } )
+					.catch( () => false );
+
+				if ( ! editSiteModalVisible ) {
+					return;
+				}
+
+				const getStartedButton = page.locator(
+					'button:has-text("Get started")'
+				);
+				if (
+					await getStartedButton
+						.isVisible( { timeout: 1000 } )
+						.catch( () => false )
+				) {
+					await getStartedButton.click();
+					await page.waitForTimeout( 500 );
+				}
+			},
+
+			/**
 			 * Open the settings sidebar and wait for it to be ready.
 			 *
 			 * editor.openDocumentSettingsSidebar() insists on a header button
@@ -98,28 +115,30 @@ export const test = base.extend( {
 			 * core helper cannot find its own.
 			 */
 			async openSettingsSidebar() {
+				await this.dismissEditSiteTour();
+
 				const settingsRegion = page.getByRole( 'region', {
 					name: 'Editor settings',
 				} );
 
-				if (
-					await settingsRegion
-						.isVisible( { timeout: 2000 } )
-						.catch( () => false )
-				) {
-					await page.waitForTimeout( 1000 );
-					return;
+				const alreadyOpen = await settingsRegion
+					.isVisible( { timeout: 2000 } )
+					.catch( () => false );
+
+				if ( ! alreadyOpen ) {
+					try {
+						await editor.openDocumentSettingsSidebar();
+					} catch ( error ) {
+						await this.dismissEditSiteTour();
+						await page
+							.getByRole( 'button', { name: 'Settings' } )
+							.first()
+							.click();
+						await settingsRegion.waitFor( { timeout: 15000 } );
+					}
 				}
 
-				try {
-					await editor.openDocumentSettingsSidebar();
-				} catch ( error ) {
-					await page
-						.getByRole( 'button', { name: 'Settings' } )
-						.first()
-						.click();
-					await settingsRegion.waitFor( { timeout: 15000 } );
-				}
+				await this.dismissEditSiteTour();
 
 				// The sidebar can open on the Template/Document tab, which holds
 				// no block inspector controls — so every panel this plugin adds
@@ -134,6 +153,27 @@ export const test = base.extend( {
 				) {
 					await blockTab.click();
 					await page.waitForTimeout( 300 );
+				}
+
+				// WP 7.x's site editor shows an abbreviated "Pattern" overview
+				// panel — a curated Content-only summary — instead of the full
+				// block inspector when a block came from the template's default
+				// content pattern (e.g. the Query Loop in twentytwentyfive's
+				// index template is inserted as the "List of posts" pattern).
+				// That overview has no InspectorControls slot, so every panel
+				// this plugin adds is missing until you enter the pattern's own
+				// editing context via "Edit pattern".
+				const editPatternButton = page
+					.getByRole( 'button', { name: 'Edit pattern' } )
+					.first();
+				if (
+					await editPatternButton
+						.isVisible( { timeout: 1000 } )
+						.catch( () => false )
+				) {
+					await editPatternButton.click();
+					await page.waitForTimeout( 500 );
+					await this.dismissEditSiteTour();
 				}
 
 				await page.waitForTimeout( 1000 );

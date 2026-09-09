@@ -165,10 +165,16 @@ test.describe( 'Query Presets', () => {
 			title: 'Preset Test Page',
 		} );
 
-		// Insert a Query Loop block with inner blocks to bypass the pattern chooser
+		// Insert a Query Loop block with inner blocks to bypass the pattern
+		// chooser. Inserted already inherit: false, WordPress 7.x's core
+		// Query block inspector can crash on mount — it reads
+		// getPostType( postType )?.labels.singular_name without guarding
+		// `.labels`, and that record isn't always hydrated yet the moment a
+		// non-inherited query first renders. Insert inheriting (the default)
+		// and switch to a custom query afterwards, once the block has
+		// settled, to avoid the race.
 		await editor.insertBlock( {
 			name: 'core/query',
-			attributes: { query: { inherit: false, perPage: 5 } },
 			innerBlocks: [
 				{
 					name: 'core/post-template',
@@ -183,6 +189,10 @@ test.describe( 'Query Presets', () => {
 
 		// Open settings sidebar
 		await blockEditor.openSettingsSidebar();
+
+		// Switch to a custom (non-inherited) query now that the block has
+		// mounted and settled.
+		await blockEditor.queryBlock.setAsCustom();
 
 		// Expand Extra Query Loop Settings
 		await blockEditor.queryBlock.openSettingsPanel();
