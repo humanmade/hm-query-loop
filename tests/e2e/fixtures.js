@@ -155,11 +155,30 @@ export const test = base.extend( {
 				.allTextContents()
 				.catch( () => [] );
 
+			// Whether the block is standing behind its own lazy placeholder. While
+			// that is showing, neither the core block nor any of this plugin's
+			// inspector controls are mounted, so an empty Block tab is expected
+			// rather than surprising.
+			const placeholders = await editor.canvas
+				.locator( '.hm-query-loop-viewport-placeholder' )
+				.count()
+				.catch( () => -1 );
+
+			const inspector = await page
+				.locator( '[role="tabpanel"]:not([hidden])' )
+				.first()
+				.innerText()
+				.catch( () => '' );
+
 			return [
 				`area=${ state.area }`,
 				`block=${ state.block }`,
 				`tabs=[${ tabs.join( ', ' ) }]`,
 				`panels=[${ panels.join( ', ' ) }]`,
+				`placeholders=${ placeholders }`,
+				`inspector=${ JSON.stringify(
+					inspector.replace( /\s+/g, ' ' ).slice( 0, 200 )
+				) }`,
 			].join( ' ' );
 		}
 
