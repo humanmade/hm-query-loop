@@ -55,44 +55,56 @@ export const test = base.extend( {
 	 */
 	blockEditor: async ( { admin, editor, page }, use ) => {
 		/**
-		 * Dismiss the modals the site editor can open on a cold profile.
+		 * Click a control if it turns up within the grace period.
+		 *
+		 * `locator.isVisible()` answers immediately — the timeout it accepts is
+		 * ignored — so probing with it races anything the editor renders a beat
+		 * after the page settles. Waiting is the difference between dismissing a
+		 * modal and running the rest of the test underneath it.
+		 *
+		 * @param {Locator} locator Control to click.
+		 * @param {number}  timeout How long to wait for it.
+		 * @return {Promise<boolean>} Whether it was there and got clicked.
 		 */
-		async function dismissSiteEditorModals() {
-			// Dismiss "Edit your site" modal if it appears
-			const editSiteModalVisible = await page
-				.locator( 'text=Edit your site' )
-				.isVisible( { timeout: 2000 } )
-				.catch( () => false );
-
-			if ( editSiteModalVisible ) {
-				const getStartedButton = page.locator(
-					'button:has-text("Get started")'
-				);
-				const isGetStartedVisible = await getStartedButton
-					.isVisible( { timeout: 1000 } )
-					.catch( () => false );
-				if ( isGetStartedVisible ) {
-					await getStartedButton.click();
-					await page.waitForTimeout( 500 );
-				}
+		async function clickIfPresent( locator, timeout = 3000 ) {
+			try {
+				await locator.first().waitFor( { state: 'visible', timeout } );
+			} catch ( error ) {
+				return false;
 			}
 
-			// Close welcome guide if it appears
-			const welcomeGuideVisible = await page
-				.locator( '.edit-site-welcome-guide, .edit-post-welcome-guide' )
-				.isVisible( { timeout: 2000 } )
-				.catch( () => false );
+			await locator.first().click();
+			await page.waitForTimeout( 500 );
+			return true;
+		}
 
-			if ( welcomeGuideVisible ) {
-				const closeButton = page.locator(
-					'button[aria-label="Close"]'
-				);
-				const isCloseButtonVisible = await closeButton
-					.isVisible( { timeout: 1000 } )
-					.catch( () => false );
-				if ( isCloseButtonVisible ) {
-					await closeButton.click();
-					await page.waitForTimeout( 500 );
+		/**
+		 * Dismiss the modals the site editor can open on a cold profile.
+		 *
+		 * Driven off the buttons rather than off the surrounding copy: the
+		 * "Edit your site" wording this used to look for is not what WordPress
+		 * 7.x shows, so the modal went unnoticed and every later step ran
+		 * against a page whose only button was "Get started".
+		 *
+		 * Dismissing one can reveal another, so keep going until nothing more
+		 * appears.
+		 */
+		async function dismissSiteEditorModals() {
+			for ( let attempt = 0; attempt < 3; attempt++ ) {
+				const dismissed =
+					( await clickIfPresent(
+						page.getByRole( 'button', { name: 'Get started' } )
+					) ) ||
+					( await clickIfPresent(
+						page
+							.locator(
+								'.edit-site-welcome-guide, .edit-post-welcome-guide'
+							)
+							.getByRole( 'button', { name: 'Close' } )
+					) );
+
+				if ( ! dismissed ) {
+					return;
 				}
 			}
 		}
@@ -148,10 +160,13 @@ export const test = base.extend( {
 						{ timeout: 15000 }
 					);
 
-					await dismissSiteEditorModals();
-
 					if ( await isEditingTemplate( templateId, 15000 ) ) {
 						resolvedSiteEditorRoute = allRoutes.indexOf( route );
+
+						// After the editor has booted, not before: the modals
+						// are part of what it renders, so looking for them any
+						// earlier finds nothing.
+						await dismissSiteEditorModals();
 
 						// Give the editor time to initialize
 						await page.waitForTimeout( 1000 );
@@ -247,18 +262,29 @@ export const test = base.extend( {
 			},
 
 			/**
-			 * Expand a settings panel if it's not already open.
+			 * Expand a settings panel, waiting for it to be rendered first.
+			 *
+			 * The inspector is still filling in when the sidebar first reports
+			 * itself open. A panel left collapsed keeps its controls out of the
+			 * DOM, so skipping it here surfaces as a missing control later, in
+			 * whichever test happened to ask for one.
+			 *
 			 * @param {string} panelTitle - The title text of the panel to expand.
 			 */
 			async expandPanel( panelTitle ) {
-				const panel = page.locator(
-					`.components-panel__body-title:has-text("${ panelTitle }")`
-				);
-				const isExpanded = await panel
+				const toggle = page
+					.locator(
+						`.components-panel__body-title:has-text("${ panelTitle }")`
+					)
 					.locator( 'button' )
-					.getAttribute( 'aria-expanded' );
-				if ( isExpanded !== 'true' ) {
-					await panel.locator( 'button' ).click();
+					.first();
+
+				await toggle.waitFor( { state: 'visible', timeout: 15000 } );
+
+				if (
+					( await toggle.getAttribute( 'aria-expanded' ) ) !== 'true'
+				) {
+					await toggle.click();
 					await page.waitForTimeout( 300 );
 				}
 			},
@@ -350,24 +376,9 @@ export const test = base.extend( {
 					}
 				},
 				async openSettingsPanel() {
-					const extraSettingsPanel = page.locator(
-						'.components-panel__body-title:has-text("Extra Query Loop Settings")'
+					await blockEditorUtils.expandPanel(
+						'Extra Query Loop Settings'
 					);
-					if (
-						await extraSettingsPanel
-							.isVisible( { timeout: 2000 } )
-							.catch( () => false )
-					) {
-						const isExpanded = await extraSettingsPanel
-							.locator( 'button' )
-							.getAttribute( 'aria-expanded' );
-						if ( isExpanded !== 'true' ) {
-							await extraSettingsPanel
-								.locator( 'button' )
-								.click();
-							await page.waitForTimeout( 300 );
-						}
-					}
 				},
 				async excludeDisplayed() {
 					const excludeDisplayedToggle = page
