@@ -279,7 +279,22 @@ export const test = base.extend( {
 					.locator( 'button' )
 					.first();
 
-				await toggle.waitFor( { state: 'visible', timeout: 15000 } );
+				try {
+					await toggle.waitFor( {
+						state: 'visible',
+						timeout: 15000,
+					} );
+				} catch ( error ) {
+					const panels = await page
+						.locator( '.components-panel__body-title' )
+						.allTextContents();
+
+					throw new Error(
+						`No "${ panelTitle }" panel in the inspector. Panels present: ${
+							panels.join( ' | ' ) || '(none)'
+						}`
+					);
+				}
 
 				if (
 					( await toggle.getAttribute( 'aria-expanded' ) ) !== 'true'
@@ -329,23 +344,46 @@ export const test = base.extend( {
 			selectBlock: {
 				/**
 				 * Select a block by its name.
+				 *
+				 * Waits for the block to exist and then for the selection to take.
+				 * Dispatching once was a coin toss in the site editor, where the
+				 * template's blocks are parsed a beat after the editor reports the
+				 * entity open: the dispatch found an empty list and did nothing, and
+				 * the test went on to read whichever inspector happened to be showing.
+				 *
 				 * @param {string} blockName - The block name (e.g., 'core/post-template').
 				 * @param {number} index     - The index of the block to select (default: 0).
 				 */
 				async byName( blockName, index = 0 ) {
-					await page.evaluate(
-						( { name, idx } ) => {
-							const blocks = window.wp.data
+					const target = { name: blockName, idx: index };
+
+					await page.waitForFunction(
+						( { name, idx } ) =>
+							window.wp.data
 								.select( 'core/block-editor' )
-								.getBlocksByName( name );
-							if ( blocks.length > idx ) {
-								window.wp.data
-									.dispatch( 'core/block-editor' )
-									.selectBlock( blocks[ idx ] );
-							}
-						},
-						{ name: blockName, idx: index }
+								.getBlocksByName( name ).length > idx,
+						target,
+						{ timeout: 15000 }
 					);
+
+					await page.evaluate( ( { name, idx } ) => {
+						const blocks = window.wp.data
+							.select( 'core/block-editor' )
+							.getBlocksByName( name );
+						window.wp.data
+							.dispatch( 'core/block-editor' )
+							.selectBlock( blocks[ idx ] );
+					}, target );
+
+					await page.waitForFunction( ( { name, idx } ) => {
+						const store =
+							window.wp.data.select( 'core/block-editor' );
+						return (
+							store.getBlockSelectionStart() ===
+							store.getBlocksByName( name )[ idx ]
+						);
+					}, target );
+
 					await page.waitForTimeout( 500 );
 				},
 
