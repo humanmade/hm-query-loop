@@ -7,6 +7,41 @@ const { Locator } = require( '@playwright/test' );
 const { execSync } = require( 'child_process' );
 
 /**
+ * Build the site editor URLs that can open a template, newest scheme first.
+ *
+ * WordPress 7.0 moved the site editor onto path routes: the template editor
+ * used to be `?postType=wp_template&postId=theme//slug`, and is now
+ * `?p=/wp_template/theme//slug`. The old form does not error on 7.x — it
+ * quietly resolves to the dashboard route, which renders no editor header, so
+ * every test that reached for the settings sidebar timed out looking for a
+ * button that had never been drawn.
+ *
+ * @param {string} templateId Template id, `theme//slug`.
+ * @return {string[]} Admin paths to try in order.
+ */
+function siteEditorRoutes( templateId ) {
+	return [
+		`site-editor.php?p=${ encodeURIComponent(
+			`/wp_template/${ templateId }`
+		) }&canvas=edit`,
+		`site-editor.php?postId=${ encodeURIComponent(
+			templateId
+		) }&postType=wp_template&canvas=edit`,
+	];
+}
+
+/**
+ * The route scheme this WordPress accepts, remembered after the first visit.
+ *
+ * Probing costs a timeout on whichever scheme is wrong, and the answer cannot
+ * change within a run. The module is loaded once per worker, so this is a
+ * per-worker cache.
+ *
+ * @type {number|null}
+ */
+let resolvedSiteEditorRoute = null;
+
+/**
  * Extended test fixtures with additional utilities.
  */
 export const test = base.extend( {
@@ -19,6 +54,74 @@ export const test = base.extend( {
 	 * @param use
 	 */
 	blockEditor: async ( { admin, editor, page }, use ) => {
+		/**
+		 * Dismiss the modals the site editor can open on a cold profile.
+		 */
+		async function dismissSiteEditorModals() {
+			// Dismiss "Edit your site" modal if it appears
+			const editSiteModalVisible = await page
+				.locator( 'text=Edit your site' )
+				.isVisible( { timeout: 2000 } )
+				.catch( () => false );
+
+			if ( editSiteModalVisible ) {
+				const getStartedButton = page.locator(
+					'button:has-text("Get started")'
+				);
+				const isGetStartedVisible = await getStartedButton
+					.isVisible( { timeout: 1000 } )
+					.catch( () => false );
+				if ( isGetStartedVisible ) {
+					await getStartedButton.click();
+					await page.waitForTimeout( 500 );
+				}
+			}
+
+			// Close welcome guide if it appears
+			const welcomeGuideVisible = await page
+				.locator( '.edit-site-welcome-guide, .edit-post-welcome-guide' )
+				.isVisible( { timeout: 2000 } )
+				.catch( () => false );
+
+			if ( welcomeGuideVisible ) {
+				const closeButton = page.locator(
+					'button[aria-label="Close"]'
+				);
+				const isCloseButtonVisible = await closeButton
+					.isVisible( { timeout: 1000 } )
+					.catch( () => false );
+				if ( isCloseButtonVisible ) {
+					await closeButton.click();
+					await page.waitForTimeout( 500 );
+				}
+			}
+		}
+
+		/**
+		 * Whether the editor has the given template open for editing.
+		 *
+		 * Asking the editor store which entity it is on distinguishes the edit
+		 * canvas from every other thing the site editor can render, and does it
+		 * without depending on any markup.
+		 *
+		 * @param {string} templateId Template id, `theme//slug`.
+		 * @param {number} timeout    How long to allow the editor to boot.
+		 * @return {Promise<boolean>} True when the template is open.
+		 */
+		async function isEditingTemplate( templateId, timeout ) {
+			return page
+				.waitForFunction(
+					( id ) =>
+						window.wp?.data
+							?.select( 'core/editor' )
+							?.getCurrentPostId() === id,
+					templateId,
+					{ timeout }
+				)
+				.then( () => true )
+				.catch( () => false );
+		}
+
 		const blockEditorUtils = {
 			/**
 			 * Navigate to the site editor to edit a template.
@@ -30,102 +133,106 @@ export const test = base.extend( {
 				theme = 'twentytwentyfive'
 			) {
 				const templateId = `${ theme }//${ templateSlug }`;
-				await admin.visitAdminPage(
-					`site-editor.php?postId=${ encodeURIComponent(
-						templateId
-					) }&postType=wp_template&canvas=edit`
-				);
+				const allRoutes = siteEditorRoutes( templateId );
+				const routes =
+					resolvedSiteEditorRoute === null
+						? allRoutes
+						: [ allRoutes[ resolvedSiteEditorRoute ] ];
 
-				// Wait for site editor to load
-				await page.waitForSelector(
-					'.edit-site-layout, iframe[name="editor-canvas"]',
-					{ timeout: 15000 }
-				);
+				for ( const route of routes ) {
+					await admin.visitAdminPage( route );
 
-				// Dismiss "Edit your site" modal if it appears
-				const editSiteModalVisible = await page
-					.locator( 'text=Edit your site' )
-					.isVisible( { timeout: 2000 } )
-					.catch( () => false );
-
-				if ( editSiteModalVisible ) {
-					const getStartedButton = page.locator(
-						'button:has-text("Get started")'
+					// Wait for site editor to load
+					await page.waitForSelector(
+						'.edit-site-layout, iframe[name="editor-canvas"]',
+						{ timeout: 15000 }
 					);
-					const isGetStartedVisible = await getStartedButton
-						.isVisible( { timeout: 1000 } )
-						.catch( () => false );
-					if ( isGetStartedVisible ) {
-						await getStartedButton.click();
-						await page.waitForTimeout( 500 );
+
+					await dismissSiteEditorModals();
+
+					if ( await isEditingTemplate( templateId, 15000 ) ) {
+						resolvedSiteEditorRoute = allRoutes.indexOf( route );
+
+						// Give the editor time to initialize
+						await page.waitForTimeout( 1000 );
+						return;
 					}
 				}
 
-				// Close welcome guide if it appears
-				const welcomeGuideVisible = await page
-					.locator(
-						'.edit-site-welcome-guide, .edit-post-welcome-guide'
-					)
-					.isVisible( { timeout: 2000 } )
-					.catch( () => false );
-
-				if ( welcomeGuideVisible ) {
-					const closeButton = page.locator(
-						'button[aria-label="Close"]'
-					);
-					const isCloseButtonVisible = await closeButton
-						.isVisible( { timeout: 1000 } )
-						.catch( () => false );
-					if ( isCloseButtonVisible ) {
-						await closeButton.click();
-						await page.waitForTimeout( 500 );
-					}
-				}
-
-				// Give the editor time to initialize
-				await page.waitForTimeout( 1000 );
+				throw new Error(
+					`The site editor did not open ${ templateId } for editing. Tried: ${ routes.join(
+						', '
+					) }`
+				);
 			},
 
 			/**
 			 * Open the settings sidebar and wait for it to be ready.
 			 *
-			 * editor.openDocumentSettingsSidebar() insists on a header button
-			 * named exactly "Settings" inside the "Editor top bar" region. That
-			 * button is not reachable in the site editor on WordPress 7.x, so
-			 * every test that opened the sidebar there timed out while the same
-			 * tests passed in the post editor. Check whether the sidebar is
-			 * already open first, and fall back to any Settings toggle if the
-			 * core helper cannot find its own.
+			 * Done through the interface store rather than by clicking a header
+			 * button. editor.openDocumentSettingsSidebar() wants a button named
+			 * exactly "Settings" inside the "Editor top bar" region, and where
+			 * that button lives — or whether it is drawn at all — has moved
+			 * between WordPress versions. The `core/interface` store and the two
+			 * sidebar ids have not moved since 6.6.
+			 *
+			 * Asking for the block sidebar directly also settles which tab
+			 * opens: on the Document tab none of the panels this plugin adds to
+			 * core/query are rendered, so they all look missing.
 			 */
 			async openSettingsSidebar() {
 				const settingsRegion = page.getByRole( 'region', {
 					name: 'Editor settings',
 				} );
 
-				if (
-					await settingsRegion
-						.isVisible( { timeout: 2000 } )
-						.catch( () => false )
-				) {
-					await page.waitForTimeout( 1000 );
-					return;
-				}
+				await page
+					.evaluate( () => {
+						const { select, dispatch } = window.wp.data;
+						const hasSelection =
+							!! select(
+								'core/block-editor'
+							).getBlockSelectionStart();
+
+						dispatch( 'core/interface' ).enableComplementaryArea(
+							'core',
+							hasSelection
+								? 'edit-post/block'
+								: 'edit-post/document'
+						);
+					} )
+					// Leave a missing store to the fallback below rather than
+					// failing here, so the diagnostic still gets a chance to run.
+					.catch( () => {} );
 
 				try {
-					await editor.openDocumentSettingsSidebar();
+					await settingsRegion.waitFor( { timeout: 10000 } );
 				} catch ( error ) {
-					await page
-						.getByRole( 'button', { name: 'Settings' } )
-						.first()
-						.click();
-					await settingsRegion.waitFor( { timeout: 15000 } );
+					// Fall back to the core helper, then report what was on the
+					// page — a failure here is only ever read in CI output.
+					try {
+						await editor.openDocumentSettingsSidebar();
+						await settingsRegion.waitFor( { timeout: 10000 } );
+					} catch ( fallbackError ) {
+						const buttons = await page
+							.getByRole( 'button' )
+							.evaluateAll( ( nodes ) =>
+								nodes
+									.map(
+										( node ) =>
+											node.getAttribute( 'aria-label' ) ||
+											node.textContent.trim()
+									)
+									.filter( Boolean )
+							);
+
+						throw new Error(
+							`Could not open the settings sidebar. Buttons on the page: ${ buttons.join(
+								' | '
+							) }`
+						);
+					}
 				}
 
-				// The sidebar can open on the Template/Document tab, which holds
-				// no block inspector controls — so every panel this plugin adds
-				// to core/query looks missing. The same panels render fine in the
-				// post editor on the same WordPress, which is what points at the
-				// tab rather than at the panels themselves.
 				const blockTab = page.getByRole( 'tab', { name: 'Block' } );
 				if (
 					await blockTab

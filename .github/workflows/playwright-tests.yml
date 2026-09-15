@@ -29,6 +29,23 @@ on:
                 default: false
 
 jobs:
+    # The exclusion planner stubs WordPress out entirely, so it needs neither
+    # wp-env nor a browser and is worth running on its own.
+    php:
+        name: PHP unit tests
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup PHP
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.2'
+
+            - name: Run tests
+              run: npm run test:php
+
     # Lanes live here rather than inline so a caller can narrow them without
     # duplicating the jobs below.
     lanes:
@@ -50,19 +67,17 @@ jobs:
                   # re-run of an old commit resolves to the same WordPress.
                   read -r -d '' DEFAULT_BLOCKING <<'JSON' || true
                   [
-                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true }
+                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true },
+                    { "label": "7.0", "core": "WordPress/WordPress#7.0.4", "comment": true },
+                    { "label": "7.1", "core": "WordPress/WordPress#7.1",   "comment": true }
                   ]
                   JSON
 
-                  # 7.0 and 7.1 run on every PR but do not gate merging: the
-                  # suite has real compatibility gaps on WordPress 7.x that
-                  # predate this matrix (see the WP 7.x tracking issue). They
-                  # move back to DEFAULT_BLOCKING once those are closed.
-                  # nightly tracks trunk for early warning and stays here.
+                  # Only trunk is non-blocking. A failure there is early warning
+                  # of an upstream change, not a defect in the commit under test,
+                  # so it must not be able to hold up a merge.
                   read -r -d '' DEFAULT_EXPERIMENTAL <<'JSON' || true
                   [
-                    { "label": "7.0",     "core": "WordPress/WordPress#7.0.4",  "comment": true  },
-                    { "label": "7.1",     "core": "WordPress/WordPress#7.1",    "comment": true  },
                     { "label": "nightly", "core": "WordPress/WordPress#master", "comment": false }
                   ]
                   JSON
@@ -148,8 +163,7 @@ jobs:
                     echo "### :warning: WP ${{ matrix.label }} e2e failed (non-blocking)"
                     echo
                     echo "This lane runs \`${{ matrix.core }}\` and does not gate merging."
-                    echo "For trunk, a failure is early warning of an upstream change."
-                    echo "For a released version, it is a known compatibility gap — see the WP 7.x tracking issue."
+                    echo "It is early warning of an upstream change, not a defect in this commit."
                   } >> "$GITHUB_STEP_SUMMARY"
 
     # Aggregate gate. Named `test` so the pre-existing required status check
@@ -157,14 +171,16 @@ jobs:
     # branch protection does not know about.
     test:
         name: test
-        needs: e2e
+        needs: [ e2e, php ]
         if: always()
         runs-on: ubuntu-latest
         steps:
             - name: Check lane results
               env:
-                  RESULT: ${{ needs.e2e.result }}
+                  E2E: ${{ needs.e2e.result }}
+                  PHP: ${{ needs.php.result }}
               run: |
                   set -euo pipefail
-                  echo "Blocking lanes: $RESULT"
-                  [ "$RESULT" = "success" ]
+                  echo "Blocking e2e lanes: $E2E"
+                  echo "PHP unit tests: $PHP"
+                  [ "$E2E" = "success" ] && [ "$PHP" = "success" ]
