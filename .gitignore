@@ -36,3 +36,4 @@ playwright/.cache/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.wp-env.override.json

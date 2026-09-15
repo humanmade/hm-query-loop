@@ -32,7 +32,14 @@ module.exports = async () => {
 			page.waitForSelector( '#wpadminbar', { timeout: 15000 } ),
 		] );
 	} catch ( error ) {
-		console.error( 'Failed to log in to WordPress' );
+		// Report where login actually landed. WordPress bounces admin requests
+		// to interstitials (wp-admin/upgrade.php when the database is behind
+		// core, the admin email confirmation screen, and so on), none of which
+		// match the conditions above — and without the URL the timeout alone
+		// gives no clue which one it was.
+		console.error(
+			`Failed to log in to WordPress. Landed on: ${ page.url() }`
+		);
 		await browser.close();
 		throw error;
 	}

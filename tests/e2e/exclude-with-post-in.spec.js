@@ -8,6 +8,36 @@
  */
 const { test, expect } = require( './fixtures' );
 
+/**
+ * Reveals Advanced Query Loop's "Posts to Include" field.
+ *
+ * Since AQL 5.0.0 the post parameter controls live in a ToolsPanel, and
+ * "Include posts" is not one of the items shown by default — the field is only
+ * rendered once it has been enabled from that panel's options menu.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page object.
+ */
+const revealPostsToIncludeField = async ( page ) => {
+	await page.getByRole( 'button', { name: 'AQL: Post options' } ).click();
+	await page
+		.getByRole( 'menuitemcheckbox', { name: 'Include posts' } )
+		.click();
+	await page.keyboard.press( 'Escape' );
+};
+
+/**
+ * Locates Advanced Query Loop's "Posts to Include" field.
+ *
+ * Matched by its label rather than by an implicit ARIA role: the role comes
+ * from @wordpress/components' FormTokenField and is an upstream implementation
+ * detail, whereas the label is AQL's own user-facing string.
+ *
+ * @param {import('@playwright/test').Page} page Playwright page object.
+ * @return {import('@playwright/test').Locator} The "Posts to Include" input.
+ */
+const postsToIncludeField = ( page ) =>
+	page.getByLabel( 'Posts to Include', { exact: true } );
+
 test.describe( 'Exclude Displayed Posts with post__in', () => {
 	test( 'should exclude displayed posts even when post__in is set via Advanced Query Loop', async ( {
 		page,
@@ -86,20 +116,23 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 			.click();
 
 		// Selecting the pattern leaves a child block focused; re-select the
-		// AQL root block so its sidebar settings (including the Posts
-		// combobox) are shown.
+		// AQL root block so its sidebar settings (including the "AQL: Post"
+		// panel) are shown.
 		await blockEditor.selectBlock.byName( 'core/query', 0 );
 		// Check if we need to set this to a custom loop, WP 6.9 does not default to custom.
 		await blockEditor.queryBlock.setAsCustom();
 
 		// Set the posts to include - AQL requires typing to search; no posts shown until input has text.
-		await page
-			.getByRole( 'combobox', { name: 'Posts to Include' } )
-			.click();
+		await revealPostsToIncludeField( page );
+		await postsToIncludeField( page ).click();
 		await page.keyboard.type( 'Post 23' );
-		await page.getByRole( 'option', { name: 'Post 23', exact: true } ).click();
+		await page
+			.getByRole( 'option', { name: 'Post 23', exact: true } )
+			.click();
 		await page.keyboard.type( 'Post 21' );
-		await page.getByRole( 'option', { name: 'Post 21', exact: true } ).click();
+		await page
+			.getByRole( 'option', { name: 'Post 21', exact: true } )
+			.click();
 
 		// Get post titles from first query
 		const canvas = page
@@ -273,15 +306,14 @@ test.describe( 'Exclude Displayed Posts with post__in', () => {
 
 		await editor.openDocumentSettingsSidebar();
 		// Selecting the pattern leaves a child block focused; re-select the
-		// AQL root block so its sidebar settings (including the Posts
-		// combobox) are shown.
+		// AQL root block so its sidebar settings (including the "AQL: Post"
+		// panel) are shown.
 		await blockEditor.selectBlock.byName( 'core/query', 0 );
 		await blockEditor.queryBlock.setAsCustom();
 
 		// Set the posts to include - AQL requires typing to search; no posts shown until input has text.
-		await page
-			.getByRole( 'combobox', { name: 'Posts to Include' } )
-			.click();
+		await revealPostsToIncludeField( page );
+		await postsToIncludeField( page ).click();
 		for ( const postName of [
 			'Post 23',
 			'Post 21',

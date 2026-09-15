@@ -88,9 +88,54 @@ export const test = base.extend( {
 
 			/**
 			 * Open the settings sidebar and wait for it to be ready.
+			 *
+			 * editor.openDocumentSettingsSidebar() insists on a header button
+			 * named exactly "Settings" inside the "Editor top bar" region. That
+			 * button is not reachable in the site editor on WordPress 7.x, so
+			 * every test that opened the sidebar there timed out while the same
+			 * tests passed in the post editor. Check whether the sidebar is
+			 * already open first, and fall back to any Settings toggle if the
+			 * core helper cannot find its own.
 			 */
 			async openSettingsSidebar() {
-				await editor.openDocumentSettingsSidebar();
+				const settingsRegion = page.getByRole( 'region', {
+					name: 'Editor settings',
+				} );
+
+				if (
+					await settingsRegion
+						.isVisible( { timeout: 2000 } )
+						.catch( () => false )
+				) {
+					await page.waitForTimeout( 1000 );
+					return;
+				}
+
+				try {
+					await editor.openDocumentSettingsSidebar();
+				} catch ( error ) {
+					await page
+						.getByRole( 'button', { name: 'Settings' } )
+						.first()
+						.click();
+					await settingsRegion.waitFor( { timeout: 15000 } );
+				}
+
+				// The sidebar can open on the Template/Document tab, which holds
+				// no block inspector controls — so every panel this plugin adds
+				// to core/query looks missing. The same panels render fine in the
+				// post editor on the same WordPress, which is what points at the
+				// tab rather than at the panels themselves.
+				const blockTab = page.getByRole( 'tab', { name: 'Block' } );
+				if (
+					await blockTab
+						.isVisible( { timeout: 2000 } )
+						.catch( () => false )
+				) {
+					await blockTab.click();
+					await page.waitForTimeout( 300 );
+				}
+
 				await page.waitForTimeout( 1000 );
 			},
 
@@ -272,5 +317,12 @@ export function resetDatabase() {
 	wpCli(
 		`wp db import /var/www/html/wp-content/plugins/hm-query-loop/tests/e2e/database.sql`
 	);
+	// database.sql is a dump taken on one WordPress version, so it pins
+	// `db_version` to whatever that was. On any other version core treats the
+	// database as out of date and redirects every admin request to
+	// wp-admin/upgrade.php, which makes the login in global-setup.js time out
+	// before a single test runs. Upgrading keeps the fixture version-agnostic,
+	// and is a no-op when the versions already match.
+	wpCli( `wp core update-db` );
 	wpCli( `wp cache flush` );
 }
