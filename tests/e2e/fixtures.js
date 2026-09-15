@@ -110,6 +110,60 @@ export const test = base.extend( {
 		}
 
 		/**
+		 * Describe what the inspector is actually showing.
+		 *
+		 * This suite can only be watched through CI, so when a control is not
+		 * where a test expects it, the failure has to carry enough state to say
+		 * why in one round rather than several.
+		 *
+		 * @return {Promise<string>} One-line summary of the editor's state.
+		 */
+		async function describeInspector() {
+			const state = await page
+				.evaluate( () => {
+					const { select } = window.wp.data;
+					const blockEditorStore = select( 'core/block-editor' );
+					const selected = blockEditorStore.getBlockSelectionStart();
+
+					return {
+						area: select(
+							'core/interface'
+						).getActiveComplementaryArea( 'core' ),
+						block: selected
+							? blockEditorStore.getBlockName( selected )
+							: null,
+					};
+				} )
+				.catch( () => ( { area: '?', block: '?' } ) );
+
+			const tabs = await page
+				.getByRole( 'tab' )
+				.evaluateAll( ( nodes ) =>
+					nodes.map(
+						( node ) =>
+							`${ node.textContent.trim() }${
+								node.getAttribute( 'aria-selected' ) === 'true'
+									? '*'
+									: ''
+							}`
+					)
+				)
+				.catch( () => [] );
+
+			const panels = await page
+				.locator( '.components-panel__body-title' )
+				.allTextContents()
+				.catch( () => [] );
+
+			return [
+				`area=${ state.area }`,
+				`block=${ state.block }`,
+				`tabs=[${ tabs.join( ', ' ) }]`,
+				`panels=[${ panels.join( ', ' ) }]`,
+			].join( ' ' );
+		}
+
+		/**
 		 * Whether the editor has the given template open for editing.
 		 *
 		 * Asking the editor store which entity it is on distinguishes the edit
@@ -293,14 +347,8 @@ export const test = base.extend( {
 						timeout: 15000,
 					} );
 				} catch ( error ) {
-					const panels = await page
-						.locator( '.components-panel__body-title' )
-						.allTextContents();
-
 					throw new Error(
-						`No "${ panelTitle }" panel in the inspector. Panels present: ${
-							panels.join( ' | ' ) || '(none)'
-						}`
+						`No "${ panelTitle }" panel in the inspector. ${ await describeInspector() }`
 					);
 				}
 
