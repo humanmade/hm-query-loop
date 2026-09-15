@@ -339,6 +339,24 @@ export const test = base.extend( {
 						.catch( () => {} );
 				}
 
+				// WordPress 7.0 and 7.1 content-lock template patterns (e.g.
+				// the "List of posts" pattern twentytwentyfive's index
+				// template uses for its Query Loop). Selecting a block
+				// inside one still shows the pattern's own card and a
+				// single "Content" panel — none of this plugin's controls —
+				// until "Edit pattern" is clicked to enter editing mode for
+				// the blocks inside it.
+				if (
+					await clickIfPresent(
+						settingsRegion.getByRole( 'button', {
+							name: 'Edit pattern',
+						} ),
+						2000
+					)
+				) {
+					await page.waitForTimeout( 500 );
+				}
+
 				await page.waitForTimeout( 1000 );
 			},
 
