@@ -248,14 +248,22 @@ export const test = base.extend( {
 					}
 				}
 
-				const blockTab = page.getByRole( 'tab', { name: 'Block' } );
+				// Then make sure the Block tab is the one showing. Asking the
+				// interface store for the block sidebar is meant to settle this
+				// on its own, but the tab can still come up on Document — the
+				// sidebar mounts after the dispatch and picks its own default.
+				// Clicking is the part that sticks, so wait for the tab rather
+				// than probing for it, and wait again for it to take.
 				if (
-					await blockTab
-						.isVisible( { timeout: 2000 } )
-						.catch( () => false )
+					await clickIfPresent(
+						page.getByRole( 'tab', { name: 'Block' } ),
+						10000
+					)
 				) {
-					await blockTab.click();
-					await page.waitForTimeout( 300 );
+					await page
+						.getByRole( 'tab', { name: 'Block', selected: true } )
+						.waitFor( { state: 'visible', timeout: 10000 } )
+						.catch( () => {} );
 				}
 
 				await page.waitForTimeout( 1000 );
