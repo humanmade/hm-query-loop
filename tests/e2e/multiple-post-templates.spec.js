@@ -134,21 +134,11 @@ test.describe( 'Multiple Post Templates', () => {
 		await page
 			.getByRole( 'spinbutton', { name: 'Posts per template' } )
 			.fill( '2' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).click();
-		await page
-			.getByRole( 'spinbutton', { name: 'Columns' } )
-			.press( 'Shift+ArrowLeft' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).fill( '2' );
 		await page
 			.getByRole( 'toolbar', { name: 'Block tools' } )
 			.getByLabel( 'Options' )
 			.click();
 		await page.getByRole( 'menuitem', { name: /^Duplicate / } ).click();
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).click();
-		await page
-			.getByRole( 'spinbutton', { name: 'Columns' } )
-			.press( 'Shift+ArrowLeft' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).fill( '3' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();
@@ -257,11 +247,6 @@ test.describe( 'Multiple Post Templates', () => {
 		await page
 			.getByRole( 'spinbutton', { name: 'Posts per template' } )
 			.fill( '2' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).click();
-		await page
-			.getByRole( 'spinbutton', { name: 'Columns' } )
-			.press( 'Shift+ArrowLeft' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).fill( '2' );
 
 		// Duplicate to create third post template
 		await page
@@ -271,11 +256,6 @@ test.describe( 'Multiple Post Templates', () => {
 		await page.getByRole( 'menuitem', { name: /^Duplicate / } ).click();
 
 		// Configure third post template: leave Posts per template EMPTY (should auto-calculate to 7)
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).click();
-		await page
-			.getByRole( 'spinbutton', { name: 'Columns' } )
-			.press( 'Shift+ArrowLeft' );
-		await page.getByRole( 'spinbutton', { name: 'Columns' } ).fill( '3' );
 		await page
 			.getByRole( 'button', { name: 'Post Template Settings' } )
 			.click();

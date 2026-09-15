@@ -50,19 +50,16 @@ jobs:
                   # re-run of an old commit resolves to the same WordPress.
                   read -r -d '' DEFAULT_BLOCKING <<'JSON' || true
                   [
-                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true }
+                    { "label": "6.9", "core": "WordPress/WordPress#6.9.7", "comment": true },
+                    { "label": "7.0", "core": "WordPress/WordPress#7.0.4", "comment": true },
+                    { "label": "7.1", "core": "WordPress/WordPress#7.1",   "comment": true }
                   ]
                   JSON
 
-                  # 7.0 and 7.1 run on every PR but do not gate merging: the
-                  # suite has real compatibility gaps on WordPress 7.x that
-                  # predate this matrix (see the WP 7.x tracking issue). They
-                  # move back to DEFAULT_BLOCKING once those are closed.
-                  # nightly tracks trunk for early warning and stays here.
+                  # nightly tracks trunk for early warning only: a nightly-only
+                  # regression isn't yet released, so it shouldn't block a PR.
                   read -r -d '' DEFAULT_EXPERIMENTAL <<'JSON' || true
                   [
-                    { "label": "7.0",     "core": "WordPress/WordPress#7.0.4",  "comment": true  },
-                    { "label": "7.1",     "core": "WordPress/WordPress#7.1",    "comment": true  },
                     { "label": "nightly", "core": "WordPress/WordPress#master", "comment": false }
                   ]
                   JSON
