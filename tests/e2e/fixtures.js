@@ -304,7 +304,7 @@ export function wpCli( command ) {
 				stdio: 'pipe',
 			}
 		);
-		return String( result.split( '\n' ).slice( -1 ) );
+		return String( result.trim().split( '\n' ).slice( -1 ) );
 	} catch ( error ) {
 		console.error( `WP-CLI command failed: ${ command }` );
 		console.error( error.stdout || error.message );
