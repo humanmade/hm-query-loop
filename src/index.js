@@ -236,8 +236,13 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 		}
 
 		const { hmQueryLoop = {}, query = {} } = attributes;
-		const { perPage, hideOnPaged, excludeDisplayed, useElasticPress } =
-			hmQueryLoop;
+		const {
+			perPage,
+			hideOnPaged,
+			excludeDisplayed,
+			excludeCurrentPost,
+			useElasticPress,
+		} = hmQueryLoop;
 
 		const isInheritQuery = query.inherit || false;
 		const maxPerPage = window.hmQueryLoopSettings?.postsPerPage || 10;
@@ -361,6 +366,27 @@ const withInspectorControls = createHigherOrderComponent( ( BlockEdit ) => {
 								} )
 							}
 						/>
+						{ ! isInheritQuery && (
+							<ToggleControl
+								label={ __(
+									'Exclude current post',
+									'hm-query-loop'
+								) }
+								help={ __(
+									'Leave out the post being viewed, for example in suggested posts on a single post.',
+									'hm-query-loop'
+								) }
+								checked={ !! excludeCurrentPost }
+								onChange={ ( value ) =>
+									setAttributes( {
+										hmQueryLoop: {
+											...hmQueryLoop,
+											excludeCurrentPost: value,
+										},
+									} )
+								}
+							/>
+						) }
 						{ elasticPressAvailable && (
 							<ToggleControl
 								label={ __(

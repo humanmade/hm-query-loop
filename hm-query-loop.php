@@ -45,7 +45,11 @@ function init() {
 	add_filter( 'render_block', __NAMESPACE__ . '\\render_block', 11, 2 );
 
 	// Hook query_loop_block_query_vars to modify the query.
-	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 2 );
+	add_filter( 'query_loop_block_query_vars',  __NAMESPACE__ . '\\filter_query_loop_block_query_vars', 11, 3 );
+
+	// Drop the current post from results fetched with one post to spare, before
+	// they are tracked as displayed.
+	add_filter( 'the_posts', __NAMESPACE__ . '\\remove_current_post_from_results', 9, 2 );
 
 	// Hook into the_posts to track displayed posts and limit post-template posts.
 	add_filter( 'the_posts', __NAMESPACE__ . '\\track_displayed_posts', 10, 2 );
@@ -389,11 +393,12 @@ function render_block( $block_content, $block ) {
 /**
  * Filter queries for loops that do not inherit from the main query.
  *
- * @param array $query Query args for the query loop.
+ * @param array    $query Query args for the query loop.
  * @param WP_Block $block Current block instance.
+ * @param int      $page  Current page of the query loop.
  * @return array The modified query vars.
  */
-function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
+function filter_query_loop_block_query_vars( $query, WP_Block $block, $page = 1 ) {
 	if ( $block->name === 'core/post-template' ) {
 		global $query_loop_post_template_per_pages;
 
@@ -432,9 +437,113 @@ function filter_query_loop_block_query_vars( $query, WP_Block $block ) {
 		$query_loop_post_template_per_pages[ $query_id ][] = $post_template_per_page;
 
 		$attrs['hmQueryLoop']['excludeDisplayedForCurrentLoop'] = $query_id;
-		return modify_query_from_block_attrs( $query, $attrs );
+		$query = modify_query_from_block_attrs( $query, $attrs );
+
+		// The post template's own first page can over-fetch instead of
+		// excluding in SQL.
+		return exclude_current_post( $query, $attrs['hmQueryLoop'], (int) $page === 1 );
 	}
-	return modify_query_from_block_attrs( $query, $block->context );
+
+	$query = modify_query_from_block_attrs( $query, $block->context );
+
+	// Other blocks, such as pagination, query the loop to count its pages, so
+	// they need the real exclusion for those counts to be right.
+	return exclude_current_post( $query, $block->context['hmQueryLoop'] ?? [], false );
+}
+
+/**
+ * Get the post being viewed, if this is a single post, page or attachment view.
+ *
+ * @return int Post ID, or 0 when not viewing a single post.
+ */
+function get_current_post_id(): int {
+	return is_singular() ? (int) get_queried_object_id() : 0;
+}
+
+/**
+ * Exclude the post being viewed from a query loop.
+ *
+ * NOT IN queries scale poorly, so on the first page of a post template the
+ * query fetches one extra post instead, and
+ * remove_current_post_from_results() drops the current post, or the spare post
+ * if the current post was not in the results.
+ *
+ * @param array $query       Query args for the query loop.
+ * @param array $settings    The loop's hmQueryLoop settings.
+ * @param bool  $over_fetch  Whether this query may fetch one extra post instead
+ *                           of excluding the current post in SQL.
+ * @return array Modified query args.
+ */
+function exclude_current_post( $query, $settings, $over_fetch ) {
+	if ( empty( $settings['excludeCurrentPost'] ) ) {
+		return $query;
+	}
+
+	$current_post_id = get_current_post_id();
+	if ( ! $current_post_id ) {
+		return $query;
+	}
+
+	// A list of posts to include can be filtered in PHP, without NOT IN.
+	if ( ! empty( $query['post__in'] ) && is_array( $query['post__in'] ) ) {
+		$post__in = array_values( array_diff( $query['post__in'], [ $current_post_id ] ) );
+
+		// An empty post__in means no restriction, so ask for a post that
+		// cannot exist.
+		$query['post__in'] = $post__in ?: [ 0 ];
+		return $query;
+	}
+
+	$per_page = (int) ( $query['posts_per_page'] ?? get_option( 'posts_per_page', 10 ) );
+
+	if ( ! $over_fetch && $per_page > 0 ) {
+		return exclude_posts_from_query( $query, [ $current_post_id ] );
+	}
+
+	// Unlimited queries return the current post anyway, so only drop it.
+	if ( $per_page > 0 ) {
+		$query['posts_per_page'] = $per_page + 1;
+	}
+
+	$query['hm_query_loop_exclude_current_post'] = [
+		'post_id'  => $current_post_id,
+		'per_page' => $per_page,
+	];
+
+	return $query;
+}
+
+/**
+ * Remove the current post from a query loop's results.
+ *
+ * Pairs with exclude_current_post(), which fetches one post more than the
+ * loop shows. The current post is removed if present, and the list is then
+ * trimmed back to the loop's own post count.
+ *
+ * @param array    $posts Array of post objects.
+ * @param WP_Query $query The WP_Query instance.
+ * @return array Array of post objects.
+ */
+function remove_current_post_from_results( $posts, $query ) {
+	$exclusion = $query->get( 'hm_query_loop_exclude_current_post' );
+	if ( empty( $exclusion ) || ! is_array( $posts ) ) {
+		return $posts;
+	}
+
+	$posts = array_values(
+		array_filter(
+			$posts,
+			function ( $post ) use ( $exclusion ) {
+				return (int) ( $post->ID ?? $post ) !== $exclusion['post_id'];
+			}
+		)
+	);
+
+	if ( $exclusion['per_page'] > 0 ) {
+		$posts = array_slice( $posts, 0, $exclusion['per_page'] );
+	}
+
+	return $posts;
 }
 
 /**

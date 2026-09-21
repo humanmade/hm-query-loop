@@ -37,6 +37,7 @@ The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/po
   perPage: number | undefined,      // Custom posts per page value
   hideOnPaged: boolean,             // Whether to hide on paginated pages
   excludeDisplayed: boolean,        // Whether to exclude displayed posts
+  excludeCurrentPost: boolean,      // Whether to exclude the post being viewed (non-inherited queries only)
   useElasticPress: boolean,         // Whether to route query through ElasticPress (only shown when EP is active)
 }
 ```
@@ -60,6 +61,12 @@ The plugin handles two different query scenarios:
 - `the_posts` filter tracks displayed post IDs across all query loops on a page
 - Global `$displayed_post_ids` array accumulates IDs from rendered query loops
 - Subsequent query loops with `excludeDisplayed` enabled filter out tracked IDs via `post__not_in`
+
+### Exclude Current Post
+- `excludeCurrentPost` leaves out `get_queried_object_id()` on singular views, and does nothing elsewhere, including editor previews
+- `post__not_in` scales poorly, so the post template's page 1 query fetches `posts_per_page + 1` instead. `remove_current_post_from_results` (`the_posts`, priority 9, before tracking) drops the current post and trims back to the loop's count
+- Every other query from the loop (page 2+, and pagination blocks counting pages) uses `exclude_posts_from_query`, so offsets and page counts stay exact. Only paginated loops pay for `NOT IN`
+- Loops with `post__in` drop the ID from that list instead
 
 ### Editor Viewport Placeholder (Lazy Rendering)
 `withViewportPlaceholder` HOC (registered last, so it wraps the plugin's other `core/query` enhancements) replaces off-screen Query Loop blocks with a cheap `<Placeholder>` that fires no REST request. Mounting the real block triggers the core preview fetch, so on a page with many query loops this defers those requests until each block scrolls near the viewport. An `IntersectionObserver` — constructed from the target node's own `ownerDocument.defaultView` so it works whether or not the canvas is iframed — swaps in the real block on intersection (with a 300px `rootMargin` preload). Selecting a block (e.g. right after insertion or via List View) renders it immediately, and once rendered a block stays rendered (latched via state) so scrolling away neither discards edits nor refetches.
@@ -114,6 +121,7 @@ The plugin provides a PHP API for registering custom query presets that can be s
 - `tests/e2e/multiple-post-templates.spec.js` - E2E tests for multiple post templates
 - `tests/e2e/unique-query-id.spec.js` - E2E tests for query ID deduplication
 - `tests/e2e/exclude-with-post-in.spec.js` - E2E tests for exclusion with post__in queries
+- `tests/e2e/exclude-current-post.spec.js` - E2E tests for excluding the post being viewed
 - `tests/e2e/viewport-placeholder.spec.js` - E2E tests for lazy viewport placeholder rendering
 
 ## Testing Environment

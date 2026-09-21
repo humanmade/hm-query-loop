@@ -20,15 +20,21 @@ Enable this option to automatically exclude posts that have been displayed by pr
 
 **Important:** The exclusion applies to all query loops rendered before the current one, regardless of whether they were visible (e.g., hidden due to pagination settings).
 
-### 4. Multiple Post Templates
+### 4. Exclude Current Post
+
+Enable this option on a Query Loop that does not inherit the query to leave out the post being viewed, for example suggested posts on a single post template. The loop still shows its full number of posts.
+
+The loop avoids `post__not_in`, which scales poorly on large sites. On the first page it fetches one extra post and drops the current post, or the spare post, in PHP. Queries that need exact counts, such as later pages and the loop's pagination blocks, still use `post__not_in`.
+
+### 5. Multiple Post Templates
 
 A single Query Loop block (non-inherited) can contain multiple `core/post-template` blocks, each showing a different slice of the query results. Each Post Template block gets a "Posts per template" setting in its inspector controls to control how many posts it shows.
 
-### 5. Query ID Deduplication
+### 6. Query ID Deduplication
 
 The plugin automatically assigns unique query IDs when blocks are copy-pasted or when a page renders the same template multiple times, preventing broken post exclusion and pagination.
 
-### 6. Query Presets
+### 7. Query Presets
 
 Register custom query configurations in PHP that can be selected from a dropdown in the block editor. This allows developers to create reusable, dynamic queries (like "Related Articles" or "Trending Posts") that content editors can easily apply to any Query Loop block.
 
@@ -37,7 +43,7 @@ Register custom query configurations in PHP that can be selected from a dropdown
 - Queries work in both the editor preview and on the frontend
 - Automatically hooks into all public post types via the REST API
 
-### 7. Sticky Posts
+### 8. Sticky Posts
 
 Pin a hand-picked, ordered set of posts to the front of a query loop. Selected posts render first, in the order chosen in the editor; everything else follows in whatever order the block's own settings produce.
 
@@ -98,6 +104,7 @@ See [tests/e2e/README.md](tests/e2e/README.md) for more details on the test setu
    - **Posts per page (Override)**: Only visible when inheriting query - enter a number to override posts per page, or leave empty to use default
    - **Hide on paginated pages**: Toggle to hide this block on page 2+
    - **Exclude already displayed posts**: Toggle to avoid showing duplicate posts
+   - **Exclude current post**: Only visible when not inheriting query - toggle to leave out the post being viewed
 4. For non-inherited queries with multiple Post Template blocks, select each `core/post-template` and set **Posts per template** to control how many posts each template shows
 5. To pin posts to the front, open the **Sticky Posts** panel, search for a post and select it. Use the arrows to reorder pinned posts, or **Unpin** to remove one
 
@@ -111,6 +118,7 @@ The plugin exposes an `hmQueryLoop` context object from `core/query` to `core/po
 	perPage: number | undefined,      // Custom posts per page value
 	hideOnPaged: boolean,             // Whether to hide on paginated pages
 	excludeDisplayed: boolean,        // Whether to exclude displayed posts
+	excludeCurrentPost: boolean,      // Whether to exclude the post being viewed
 	stickyPosts: number[] | undefined // Post IDs pinned to the front, in order
 }
 ```
