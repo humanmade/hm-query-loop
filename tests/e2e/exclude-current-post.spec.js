@@ -8,6 +8,17 @@
 const { test, expect, wpCli } = require( './fixtures' );
 
 test.describe( 'Exclude current post', () => {
+	// The database is only reset once per run. Left in place, this post and
+	// its query loop would show up in other specs' post listings.
+	test.afterEach( () => {
+		const postId = wpCli(
+			'wp post list --post_type=post --name=test-exclude-current-post --field=ID'
+		);
+		if ( /^\d+$/.test( postId ) ) {
+			wpCli( `wp post delete ${ postId } --force` );
+		}
+	} );
+
 	test( 'should leave the post being viewed out of its own query loop, and still fill the loop', async ( {
 		page,
 		admin,
