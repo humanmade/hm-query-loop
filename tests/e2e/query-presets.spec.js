@@ -165,10 +165,17 @@ test.describe( 'Query Presets', () => {
 			title: 'Preset Test Page',
 		} );
 
-		// Insert a Query Loop block with inner blocks to bypass the pattern chooser
+		// Insert a Query Loop block with inner blocks to bypass the pattern
+		// chooser. `query` is a single object-shaped attribute, so passing a
+		// partial value here replaces block.json's whole default rather than
+		// merging into it — postType must be given explicitly, or WordPress
+		// 7.1's core/query edit component crashes trying to read the label
+		// of an undefined post type.
 		await editor.insertBlock( {
 			name: 'core/query',
-			attributes: { query: { inherit: false, perPage: 5 } },
+			attributes: {
+				query: { inherit: false, perPage: 5, postType: 'post' },
+			},
 			innerBlocks: [
 				{
 					name: 'core/post-template',

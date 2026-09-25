@@ -20,9 +20,13 @@ Enable this option to automatically exclude posts that have been displayed by pr
 
 **Important:** The exclusion applies to all query loops rendered before the current one, regardless of whether they were visible (e.g., hidden due to pagination settings).
 
+For query loops that do not inherit the main query, the exclusion is applied in PHP rather than through `post__not_in`, so that loops on different URLs can share one cached result set. See [Query caching](docs/query-caching.md).
+
 ### 4. Multiple Post Templates
 
 A single Query Loop block (non-inherited) can contain multiple `core/post-template` blocks, each showing a different slice of the query results. Each Post Template block gets a "Posts per template" setting in its inspector controls to control how many posts it shows.
+
+All the templates in a loop run the same query and take their own window out of the results, so however many templates a loop has, it costs one database query.
 
 ### 5. Query ID Deduplication
 
@@ -37,7 +41,13 @@ Register custom query configurations in PHP that can be selected from a dropdown
 - Queries work in both the editor preview and on the frontend
 - Automatically hooks into all public post types via the REST API
 
-### 7. Sticky Posts
+### 7. Cache-friendly Exclusion
+
+Excluding posts with `post__not_in` gives every URL its own `WP_Query` cache entry, because the excluded IDs end up in the SQL the cache key is built from. For non-inherited query loops this plugin fetches a few extra posts instead and drops the unwanted ones in PHP, so "the latest 5 posts, excluding this one" is one cached query shared by every post on the site rather than one per post.
+
+This applies to the plugin's own exclusion setting, to the `excludeCurrent` block attribute, and to anything added through the `hm_query_loop_deferred_exclusions` filter. Note that WordPress 7.0 and earlier ignore `excludeCurrent` entirely (core gained it in 7.1), so on those versions this plugin implements the setting rather than merely making it cacheable. See [Query caching](docs/query-caching.md) for the details and the trade-offs.
+
+### 8. Sticky Posts
 
 Pin a hand-picked, ordered set of posts to the front of a query loop. Selected posts render first, in the order chosen in the editor; everything else follows in whatever order the block's own settings produce.
 
@@ -69,6 +79,14 @@ The ordering is applied in SQL via `posts_orderby` rather than by re-sorting res
 The plugin includes end-to-end tests using Playwright and `@wordpress/scripts`.
 
 #### Running Tests
+
+The exclusion planner has unit tests that need nothing but PHP:
+
+```bash
+npm run test:php
+```
+
+The rest of the suite is end to end:
 
 1. Start the WordPress test environment:
    ```bash
