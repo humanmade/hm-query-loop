@@ -37,3 +37,4 @@ playwright/.cache/
 /playwright/.cache/
 /playwright/.auth/
 .wp-env.override.json
+/composer.lock

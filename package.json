@@ -14,6 +14,7 @@
 		"lint:css:fix": "wp-scripts lint-style --fix",
 		"format": "wp-scripts format",
 		"wp-env": "wp-env",
+		"test:php": "php tests/php/deferred-exclusions-test.php",
 		"test:e2e": "wp-scripts test-playwright",
 		"test:e2e:debug": "wp-scripts test-playwright --debug",
 		"test:e2e:watch": "wp-scripts test-playwright --watch"
