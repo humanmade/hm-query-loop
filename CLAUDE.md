@@ -118,7 +118,7 @@ The plugin provides a PHP API for registering custom query presets that can be s
 4. Frontend queries are modified via `query_loop_block_query_vars` filter, which puts the `WP_Block` into the context as `block_instance`
 5. The selected preset is stored in `query.hmPreset` block attribute
 
-`block_instance` is null on REST (`modify_rest_query_for_preset`): the editor preview queries the collection endpoint and never renders the block, so there is no instance to carry. Both paths set the key explicitly, so the context has one shape.
+`block_instance` is null on REST. The editor preview queries the collection endpoint and never renders a block, so there is no instance to carry. See `modify_rest_query_for_preset()`. Both paths set the key explicitly, so the context has one shape.
 
 `post_id` comes from `$block->context['postId']` where the block has it, falling back to `get_the_ID()`. The block context is what core resolved for that block; `get_the_ID()` is global loop state, and the two can diverge.
 

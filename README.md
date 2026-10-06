@@ -208,8 +208,6 @@ preview from the front end. Check `block_instance` before using it, and return
 `$query_vars` unchanged when it is null. The key is always present, so `?->` reads it
 safely and no `isset()` check is needed.
 
-The callback signature is unchanged, so every existing preset keeps working.
-
 **Available Functions:**
 
 - `\HM\QueryLoop\QueryPresets\register_query_preset( $name, $label, $callback )` - Register a preset
