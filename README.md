@@ -171,7 +171,8 @@ add_action( 'init', function() {
 
 `$context['block_instance']` is the `WP_Block` being rendered, so a preset can read
 anything core puts in its context — `postId`, or the `termId` and `taxonomy` a Term
-Template provides to the blocks inside it:
+Template provides to the blocks inside it. This example is illustrative — the
+plugin ships no presets of its own:
 
 ```php
 \HM\QueryLoop\QueryPresets\register_query_preset(
@@ -202,9 +203,10 @@ reading it, so both keys stay.
 
 `block_instance` is null on REST requests. The editor preview fetches posts from the
 collection endpoint rather than rendering the block, so there is no block instance to
-carry — a preset that depends on block context will behave differently in the editor
-preview to the frontend. Code for that rather than expecting a block. The key is
-always present, so `?->` is enough and no `isset()` is needed.
+carry. A preset that depends on block context behaves differently in the editor
+preview from the front end. Check `block_instance` before using it, and return
+`$query_vars` unchanged when it is null. The key is always present, so `?->` reads it
+safely and no `isset()` check is needed.
 
 The callback signature is unchanged, so every existing preset keeps working.
 

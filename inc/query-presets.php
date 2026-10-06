@@ -191,8 +191,9 @@ function modify_rest_query_for_preset( array $args, \WP_REST_Request $request ):
 	$context = [
 		'post_id'        => $request->get_param( 'post_id' ) ?? get_the_ID() ?? 0,
 		'is_rest'        => true,
-		// Set explicitly, so the context has one shape and presets need no isset dance.
-		// REST renders no block: the editor preview queries the collection endpoint.
+		// Set explicitly, so the context has one shape and presets can read it with
+		// `?->` and no isset() check. REST renders no block: the editor preview
+		// queries the collection endpoint.
 		'block_instance' => null,
 		'block'          => [
 			'perPage' => $request->get_param( 'per_page' ),
