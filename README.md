@@ -147,7 +147,8 @@ add_action( 'init', function() {
         'Related Articles',           // Label shown in dropdown
         function( $query_vars, $context ) {
             // $context includes:
-            // - post_id: The post the block is rendering for
+            // - post_id: The post the block is rendering for ($block->context['postId'],
+            //   falling back to get_the_ID())
             // - is_rest: Boolean, true when called from REST API (editor)
             // - block_instance: The WP_Block being rendered, or null on REST
             // - block: Array with perPage and page values. Despite the name this is

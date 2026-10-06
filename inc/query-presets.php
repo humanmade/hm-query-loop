@@ -220,7 +220,10 @@ function filter_query_loop_block_query_vars( array $query_vars, WP_Block $block,
 	}
 
 	$context = [
-		'post_id'        => get_the_ID() ?? 0,
+		// Prefer what core resolved for this block over global loop state: the two
+		// agree on a singular template, and diverge where the global post is not
+		// what the block is rendering for.
+		'post_id'        => $block_context['postId'] ?? get_the_ID() ?? 0,
 		'is_rest'        => false,
 		// Presets need the block itself to reach core's context — termId and taxonomy
 		// inside a Term Template, postId, and so on. 'block' below is not that.

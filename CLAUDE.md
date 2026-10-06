@@ -120,6 +120,8 @@ The plugin provides a PHP API for registering custom query presets that can be s
 
 The callback signature is unchanged — the block travels in the context array that was already there. `block_instance` is null on REST (`modify_rest_query_for_preset`): the editor preview queries the collection endpoint and never renders the block, so there is no instance to carry. The key is set explicitly in both paths, so the context has one shape.
 
+`post_id` comes from `$block->context['postId']` where the block has it, falling back to `get_the_ID()`. The block context is what core resolved for that block; `get_the_ID()` is global loop state, and the two can diverge.
+
 ## Key Files
 
 - `hm-query-loop.php` - Main plugin file with all PHP hooks and query modification logic

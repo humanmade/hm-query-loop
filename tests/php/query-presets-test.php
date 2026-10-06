@@ -157,6 +157,23 @@ namespace HM\QueryLoop\Tests\Presets {
 	check( 'frontend: context carries the block instance', $frontend['block_instance'], $block );
 	check( 'frontend: is_rest false', $frontend['is_rest'], false );
 
+	// post_id follows the block, not the global loop. $block carries no postId, so
+	// this one falls back; the next block supplies one that disagrees with the global.
+	$GLOBALS['current_post_id'] = 12;
+	filter_query_loop_block_query_vars( [ 'posts_per_page' => 5 ], $block, 1 );
+	check( 'post_id: falls back to the global post', $seen_context['records_context']['post_id'], 12 );
+
+	$other_post_block = new WP_Block(
+		'core/post-template',
+		[
+			'query'  => [ 'hmPreset' => 'records_context' ],
+			'postId' => 34,
+		]
+	);
+	filter_query_loop_block_query_vars( [ 'posts_per_page' => 5 ], $other_post_block, 1 );
+	check( 'post_id: block context wins over the global post', $seen_context['records_context']['post_id'], 34 );
+	$GLOBALS['current_post_id'] = 0;
+
 	// 'block' is misnamed but load-bearing: renaming it would break existing presets.
 	check( 'frontend: block stays pagination metadata', $frontend['block'], [ 'perPage' => 5, 'page' => 2 ] );
 
