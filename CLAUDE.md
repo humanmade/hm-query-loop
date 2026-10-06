@@ -102,7 +102,9 @@ The plugin provides a PHP API for registering custom query presets that can be s
     'related_articles',           // Unique identifier
     'Related Articles',           // Human-readable label
     function( $query_vars, $context ) {
-        // $context includes: post_id, is_rest, block (perPage, page)
+        // $context includes: post_id, is_rest, block_instance, block (perPage, page)
+        // $context['block'] is pagination metadata, NOT the block — the block is
+        // $context['block_instance'], e.g. $context['block_instance']?->context['termId'] ?? 0
         // Modify and return $query_vars
         return $query_vars;
     }
@@ -113,8 +115,10 @@ The plugin provides a PHP API for registering custom query presets that can be s
 1. Presets are registered via PHP callbacks that receive query args and context
 2. The preset selector appears in the block editor when presets are registered
 3. REST API hooks are automatically added for all public post types via `rest_{$post_type}_collection_params` and `rest_{$post_type}_query`
-4. Frontend queries are modified via `query_loop_block_query_vars` filter
+4. Frontend queries are modified via `query_loop_block_query_vars` filter, which already holds the `WP_Block` and puts it in the context as `block_instance`
 5. The selected preset is stored in `query.hmPreset` block attribute
+
+The callback signature is unchanged — the block travels in the context array that was already there. `block_instance` is null on REST (`modify_rest_query_for_preset`): the editor preview queries the collection endpoint and never renders the block, so there is no instance to carry. The key is set explicitly in both paths, so the context has one shape.
 
 ## Key Files
 
@@ -124,6 +128,7 @@ The plugin provides a PHP API for registering custom query presets that can be s
 - `docs/query-caching.md` - Why exclusions are applied in PHP, and what is left to do
 - `src/index.js` - Block filters for adding inspector controls and editor preview behavior
 - `tests/php/deferred-exclusions-test.php` - Unit tests for the exclusion planner
+- `tests/php/query-presets-test.php` - Unit tests for the preset callback contract
 - `tests/e2e/fixtures.js` - Playwright test fixtures for WordPress admin
 - `tests/e2e/posts-per-page.spec.js` - E2E tests for posts per page functionality
 - `tests/e2e/query-presets.spec.js` - E2E tests for query presets

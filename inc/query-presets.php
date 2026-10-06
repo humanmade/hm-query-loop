@@ -10,6 +10,8 @@
 
 namespace HM\QueryLoop\QueryPresets;
 
+use WP_Block;
+
 /**
  * Registered query presets.
  *
@@ -24,7 +26,11 @@ $registered_presets = [];
  * @param string   $label    Human-readable label for the preset (e.g., 'Related Articles').
  * @param callable $callback Function that receives query args and block context, returns modified query args.
  *                           Signature: function(array $query_vars, array $context): array
- *                           Context includes: 'post_id' (current post), 'block' (block attributes), 'is_rest' (bool).
+ *                           Context includes: 'post_id' (the post the block is rendering for),
+ *                           'is_rest' (bool), 'block_instance' (the WP_Block, or null), and 'block' —
+ *                           which despite the name is pagination metadata ('perPage', 'page').
+ *                           'block_instance' is null on REST requests, because the editor preview
+ *                           queries the collection endpoint directly: no block is being rendered.
  * @return bool True on success, false if preset already exists.
  */
 function register_query_preset( string $name, string $label, callable $callback ): bool {
@@ -94,7 +100,8 @@ function get_query_preset( string $name ): ?array {
  *
  * @param string $name       Preset identifier.
  * @param array  $query_vars Current query arguments.
- * @param array  $context    Additional context (post_id, block, is_rest).
+ * @param array  $context    Additional context (post_id, is_rest, block_instance, block). Note
+ *                           that 'block' is pagination metadata; 'block_instance' is the WP_Block.
  * @return array Modified query arguments.
  */
 function apply_query_preset( string $name, array $query_vars, array $context = [] ): array {
@@ -182,9 +189,12 @@ function modify_rest_query_for_preset( array $args, \WP_REST_Request $request ):
 	}
 
 	$context = [
-		'post_id' => $request->get_param( 'post_id' ) ?? get_the_ID() ?? 0,
-		'is_rest' => true,
-		'block'   => [
+		'post_id'        => $request->get_param( 'post_id' ) ?? get_the_ID() ?? 0,
+		'is_rest'        => true,
+		// Set explicitly, so the context has one shape and presets need no isset dance.
+		// REST renders no block: the editor preview queries the collection endpoint.
+		'block_instance' => null,
+		'block'          => [
 			'perPage' => $request->get_param( 'per_page' ),
 		],
 	];
@@ -195,14 +205,14 @@ function modify_rest_query_for_preset( array $args, \WP_REST_Request $request ):
 /**
  * Filter query vars for the Query Loop block on the frontend.
  *
- * @param array     $query_vars Existing query variables.
- * @param \WP_Block $block      Block instance.
- * @param int       $page       Current page number.
+ * @param array    $query_vars Existing query variables.
+ * @param WP_Block $block      Block instance.
+ * @param int      $page       Current page number.
  * @return array Modified query variables.
  */
-function filter_query_loop_block_query_vars( array $query_vars, \WP_Block $block, int $page ): array {
-	$context = $block->context ?? [];
-	$query_attr = $context['query'] ?? [];
+function filter_query_loop_block_query_vars( array $query_vars, WP_Block $block, int $page ): array {
+	$block_context = $block->context ?? [];
+	$query_attr = $block_context['query'] ?? [];
 	$preset_name = $query_attr['hmPreset'] ?? '';
 
 	if ( empty( $preset_name ) ) {
@@ -210,9 +220,12 @@ function filter_query_loop_block_query_vars( array $query_vars, \WP_Block $block
 	}
 
 	$context = [
-		'post_id' => get_the_ID() ?? 0,
-		'is_rest' => false,
-		'block'   => [
+		'post_id'        => get_the_ID() ?? 0,
+		'is_rest'        => false,
+		// Presets need the block itself to reach core's context — termId and taxonomy
+		// inside a Term Template, postId, and so on. 'block' below is not that.
+		'block_instance' => $block,
+		'block'          => [
 			'perPage' => $query_vars['posts_per_page'] ?? get_option( 'posts_per_page', 10 ),
 			'page'    => $page,
 		],

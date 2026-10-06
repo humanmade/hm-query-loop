@@ -147,9 +147,11 @@ add_action( 'init', function() {
         'Related Articles',           // Label shown in dropdown
         function( $query_vars, $context ) {
             // $context includes:
-            // - post_id: Current post ID (useful for related content)
+            // - post_id: The post the block is rendering for
             // - is_rest: Boolean, true when called from REST API (editor)
-            // - block: Array with perPage and page values
+            // - block_instance: The WP_Block being rendered, or null on REST
+            // - block: Array with perPage and page values. Despite the name this is
+            //   pagination metadata, not the block — that is block_instance.
 
             $related_ids = get_post_meta( $context['post_id'], 'related_posts', true );
 
@@ -163,6 +165,47 @@ add_action( 'init', function() {
     );
 });
 ```
+
+### Reading block context
+
+`$context['block_instance']` is the `WP_Block` being rendered, so a preset can read
+anything core puts in its context — `postId`, or the `termId` and `taxonomy` a Term
+Template provides to the blocks inside it:
+
+```php
+\HM\QueryLoop\QueryPresets\register_query_preset(
+    'posts_in_this_term',
+    'Posts in this term',
+    function( $query_vars, $context ) {
+        $term_id = $context['block_instance']?->context['termId'] ?? 0;
+
+        if ( ! $term_id ) {
+            return $query_vars;
+        }
+
+        $query_vars['tax_query'] = [
+            [
+                'taxonomy' => $context['block_instance']->context['taxonomy'] ?? 'category',
+                'terms'    => [ $term_id ],
+            ],
+        ];
+
+        return $query_vars;
+    }
+);
+```
+
+It is named `block_instance` because `$context['block']` was there first and is not
+the block: it holds `perPage` and `page`. Renaming that would break presets already
+reading it, so both keys stay.
+
+`block_instance` is null on REST requests. The editor preview fetches posts from the
+collection endpoint rather than rendering the block, so there is no block instance to
+carry — a preset that depends on block context will behave differently in the editor
+preview to the frontend. Code for that rather than expecting a block. The key is
+always present, so `?->` is enough and no `isset()` is needed.
+
+The callback signature is unchanged, so every existing preset keeps working.
 
 **Available Functions:**
 
