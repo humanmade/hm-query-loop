@@ -199,6 +199,23 @@ function add_displayed_post_ids( $post_ids ) {
 }
 
 /**
+ * Get the page number of the request, before any inherited loop changes it.
+ *
+ * Read on first use, so it is set whichever kind of loop renders first.
+ *
+ * @return int The page number, 0 or 1 on the first page.
+ */
+function get_original_paged(): int {
+	global $original_paged;
+
+	if ( empty( $original_paged ) ) {
+		$original_paged = (int) get_query_var( 'paged', 1 );
+	}
+
+	return $original_paged;
+}
+
+/**
  * Get used post IDs for a specific query loop.
  *
  * @param string $query_id Query loop block ID.
@@ -338,9 +355,7 @@ function pre_render_block( $pre_render, $parsed_block ) {
 	}
 
 	// We need to restore this for loops that resume normal pagination.
-	if ( empty( $original_paged ) ) {
-		$original_paged = (int) get_query_var( 'paged', 1 );
-	}
+	get_original_paged();
 
 	// Run the main query again to trigger the pre_get_posts hook if we're inheriting.
 	global $wp_query;
@@ -392,13 +407,11 @@ function render_block( $block_content, $block ) {
 		return $block_content;
 	}
 
-	global $original_paged;
-
 	// Check if block should be hidden on pagination.
 	$settings = $block['attrs']['hmQueryLoop'] ?? [];
 	$hide_on_paged = $settings['hideOnPaged'] ?? false;
 
-	if ( $hide_on_paged && $original_paged > 1 ) {
+	if ( $hide_on_paged && get_original_paged() > 1 ) {
 		return '';
 	}
 
